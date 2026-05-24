@@ -1,0 +1,19 @@
+name = "quorum"
+main = "worker/index.ts"
+compatibility_date = "2025-05-01"
+
+# One Worker serves the built SPA (dist/) and the /api/* routes.
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+# One Durable Object per event: the single-threaded, authoritative holder of the
+# event state and the WebSocket fan-out. It mutates state only through the
+# verified applyOp() in src/domain.ts.
+[[durable_objects.bindings]]
+name = "EVENT"
+class_name = "QuorumEvent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["QuorumEvent"]

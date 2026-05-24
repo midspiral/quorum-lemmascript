@@ -4,6 +4,15 @@ How Quorum goes from local-only to a genuinely shared scheduler, **without chang
 UI** and while putting the verification to work. Companion to `DESIGN.md` (the verified
 core) — this file is just the transport/infra layer.
 
+> **Status: implemented & working.** `worker/` (the Worker + `QuorumEvent` Durable Object)
+> and `src/remoteStore.ts` are in. Verified live under `wrangler dev` with two browser
+> contexts: bidirectional cross-device sync (each device sees the other's joins and
+> paints), the DO mutating only via the verified `applyOp`, optimistic client apply with no
+> rollback. Build the backend bundle with `VITE_REMOTE=1` (the `worker:dev` / `deploy`
+> scripts do this); `vite dev` stays pure-local. Gotcha for headless tests: don't
+> `waitUntil: "networkidle"` — the open WebSocket keeps the network "busy"; use
+> `domcontentloaded`.
+
 ## The one idea
 The app already routes every change through a transport seam: `src/store.ts` exposes
 `{ getSnapshot, subscribe, dispatch(op) }` and is the only module that imports the verified

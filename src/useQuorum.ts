@@ -8,6 +8,7 @@ import { useSyncExternalStore, useMemo } from "react"
 import { heatmap, isBest, maxCount, whoIsFree, type Event, type Participant } from "./domain"
 import { opJoin, opSetAvail, makeParticipant, type Store } from "./store"
 import type { Grid } from "./gridShell"
+import type { Status } from "./persist"
 
 export interface QuorumActions {
   join(name: string): string
@@ -15,8 +16,9 @@ export interface QuorumActions {
 }
 
 export interface QuorumView {
-  grid: Grid
+  grid: Grid | null // null while a cold join is still connecting (remote)
   event: Event
+  status: Status
   heatmap: number[]
   best: boolean[]
   peak: number
@@ -29,7 +31,7 @@ export interface QuorumView {
 
 export function useQuorum(store: Store): QuorumView {
   const snap = useSyncExternalStore(store.subscribe, store.getSnapshot)
-  const { grid, event } = snap
+  const { grid, event, status } = snap
 
   const hm = useMemo(() => heatmap(event), [event])
   const best = useMemo(() => isBest(event), [event])
@@ -39,7 +41,7 @@ export function useQuorum(store: Store): QuorumView {
     () => ({
       join(name) {
         const pid = `p-${store.tick()}-${Math.random().toString(36).slice(2, 6)}`
-        store.dispatch(opJoin(makeParticipant(pid, name, grid.numSlots)))
+        store.dispatch(opJoin(makeParticipant(pid, name, grid?.numSlots ?? 0)))
         return pid
       },
       // Paint the live row of `pid` (read fresh from the store so fast drags
@@ -53,8 +55,8 @@ export function useQuorum(store: Store): QuorumView {
         store.dispatch(opSetAvail(pid, row, store.tick()))
       },
     }),
-    [store, grid.numSlots],
+    [store, grid?.numSlots],
   )
 
-  return { grid, event, heatmap: hm, best, peak, whoAt: (slot) => whoIsFree(event, slot), actions }
+  return { grid, event, status, heatmap: hm, best, peak, whoAt: (slot) => whoIsFree(event, slot), actions }
 }

@@ -276,12 +276,16 @@ function EventView({ id }: { id: string }) {
 }
 
 function EventBody({ store, id }: { store: Store; id: string }) {
-  const { grid, event, heatmap, best, peak, whoAt, actions } = useQuorum(store)
+  const { grid, event, status, heatmap, best, peak, whoAt, actions } = useQuorum(store)
   const meKey = `quorum:me:${id}`
   const [me, setMe] = useState<string | null>(() => localStorage.getItem(meKey))
   const [active, setActive] = useState<string | null>(me)
   const [mode, setMode] = useState<"paint" | "group">(me ? "paint" : "group")
   const [copied, setCopied] = useState(false)
+
+  // Remote: a cold join is still fetching the grid, or the code is unknown.
+  if (status === "missing") return <NotFound />
+  if (!grid) return <Connecting />
 
   const n = event.participants.length
   const activeP = event.participants.find((p) => p.id === active)
@@ -414,6 +418,17 @@ function JoinPrompt({ onJoin }: { onJoin: (name: string) => void }) {
         Join &amp; paint
       </button>
     </div>
+  )
+}
+
+function Connecting() {
+  return (
+    <main className="landing">
+      <div className="card">
+        <h3>Connecting…</h3>
+        <p className="muted">Fetching this event.</p>
+      </div>
+    </main>
   )
 }
 
