@@ -29,7 +29,16 @@ export default function App() {
         <a className="brand" href="#" onClick={() => go(null)}>
           quorum
         </a>
-        <span className="tag">the time that works · verified core</span>
+        <span className="tag">
+          the time that works · verified with{" "}
+          <a href="https://github.com/midspiral/LemmaScript" target="_blank" rel="noreferrer">
+            LemmaScript
+          </a>{" "}
+          ·{" "}
+          <a href="https://github.com/midspiral/quorum-lemmascript" target="_blank" rel="noreferrer">
+            source
+          </a>
+        </span>
       </header>
       {id ? <EventView id={id} /> : <Landing />}
     </div>
