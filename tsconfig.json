@@ -6,7 +6,11 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "lib": ["ES2020"]
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": false,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.jsx"]
 }

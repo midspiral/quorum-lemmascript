@@ -3,11 +3,13 @@
 Tracks the verification work still open in `src/domain.ts`. Each item lists the
 goal, an illustrative spec, what it depends on, and notes/blockers.
 
-**Verified so far** (81 VCs, 0 errors — see `DESIGN.md §9`):
-Stage 0 aggregation (heatmap = count, bounded; `maxCount`; `isBest`; `availableAtLeast`),
-Stage 0b mutations (`init`/`add`/`setAvailability`/`removeParticipant` preserve `Inv`)
-+ sparse codec round-trip (E1), Stage 1 monotonicity (Family C), Stage 2b convergence
-core + D2 LWW + op-model/`replay` (Family D).
+**Verified so far** (89 VCs, 0 errors — see `DESIGN.md §9`):
+`domain.ts` (81) — Stage 0 aggregation (heatmap = count, bounded; `maxCount`; `isBest`;
+`availableAtLeast`), Stage 0b mutations (`init`/`add`/`setAvailability`/`removeParticipant`
+preserve `Inv`) + sparse codec round-trip (E1), Stage 1 monotonicity (Family C), Stage 2b
+convergence core + D2 LWW + op-model/`replay` (Family D).
+`grid.ts` (8) — the cell↔slot mapping `gridIndex` is in-range + injective (shrinks the
+slotIndex⟷labeling trusted edge to calendar/timezone only).
 
 Workflow reminders: append new functions to the **end** of `domain.ts`; `rm -f src/domain.dfy.base`
 before any `lsc regen` (see `DESIGN.md §10`, `LS_TODO.md`); pure functions can't invoke
