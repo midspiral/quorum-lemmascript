@@ -2,10 +2,10 @@ import { useEffect, useRef } from "react"
 import { cellSlot, colLabel, timeLabel } from "../gridShell"
 
 // The single grid. Paint mode: cells reflect `row` (the active participant's
-// availability); drag to paint. Group mode: heatmap intensity + best-slot ring
-// + quorum-threshold outline. Every value shown is supplied by verified
-// functions via props — this component only renders and captures gestures.
-export default function Grid({ grid, mode, row, heatmap, best, peak, threshold, onSetCell }) {
+// availability); drag to paint. Group mode: heatmap intensity + best-slot ring.
+// Every value shown is supplied by verified functions via props — this
+// component only renders and captures gestures.
+export default function Grid({ grid, mode, row, heatmap, best, peak, onSetCell }) {
   const paint = useRef({ active: false, value: false })
 
   useEffect(() => {
@@ -39,7 +39,6 @@ export default function Grid({ grid, mode, row, heatmap, best, peak, threshold, 
           heatmap={heatmap}
           best={best}
           peak={peak}
-          threshold={threshold}
           paint={paint}
           onSetCell={onSetCell}
         />
@@ -48,7 +47,7 @@ export default function Grid({ grid, mode, row, heatmap, best, peak, threshold, 
   )
 }
 
-function Row({ grid, t, mode, row, heatmap, best, peak, threshold, paint, onSetCell }) {
+function Row({ grid, t, mode, row, heatmap, best, peak, paint, onSetCell }) {
   return (
     <>
       <div className="timelabel">{timeLabel(grid, t)}</div>
@@ -68,7 +67,6 @@ function Row({ grid, t, mode, row, heatmap, best, peak, threshold, paint, onSetC
               color: intensity > 0.55 ? "#fff" : "#3730a3",
             }
           if (best[slot]) cls.push("best")
-          if (threshold != null && count >= threshold) cls.push("quorum")
         }
 
         const onDown =

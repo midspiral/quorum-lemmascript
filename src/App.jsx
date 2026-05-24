@@ -269,12 +269,11 @@ function EventView({ id }) {
 }
 
 function EventBody({ store, id }) {
-  const { grid, event, heatmap, best, peak, atLeast, actions } = useQuorum(store)
+  const { grid, event, heatmap, best, peak, actions } = useQuorum(store)
   const meKey = `quorum:me:${id}`
   const [me, setMe] = useState(() => localStorage.getItem(meKey))
   const [active, setActive] = useState(me)
   const [mode, setMode] = useState(me ? "paint" : "group")
-  const [threshold, setThreshold] = useState(null)
   const [copied, setCopied] = useState(false)
 
   const n = event.participants.length
@@ -354,19 +353,6 @@ function EventBody({ store, id }) {
               </button>
             </div>
           )}
-          {mode === "group" && n > 0 && (
-            <label className="thresh">
-              <span>show ≥</span>
-              <input
-                type="range"
-                min="1"
-                max={n}
-                value={threshold ?? 1}
-                onChange={(e) => setThreshold(+e.target.value)}
-              />
-              <span className="k">{threshold ?? "—"}</span>
-            </label>
-          )}
         </div>
       )}
 
@@ -377,7 +363,6 @@ function EventBody({ store, id }) {
         heatmap={heatmap}
         best={best}
         peak={peak}
-        threshold={mode === "group" ? threshold : null}
         onSetCell={(slot, value) => active && actions.setCell(active, slot, value)}
       />
 

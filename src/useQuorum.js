@@ -1,9 +1,11 @@
 // The view's window onto a store. All scheduling math comes from the verified
-// domain.ts here — heatmap, isBest, availableAtLeast, maxCount — so components
-// only render; they never count, rank, or threshold themselves.
+// domain.ts here — heatmap, isBest, maxCount — so components only render; they
+// never count or rank themselves. (The verified `availableAtLeast` threshold
+// query lives in domain.ts too, but isn't surfaced in this UI — the heatmap
+// already shows the per-slot count.)
 
 import { useSyncExternalStore, useMemo } from "react"
-import { heatmap, isBest, availableAtLeast, maxCount } from "./domain"
+import { heatmap, isBest, maxCount } from "./domain"
 import { opJoin, opSetAvail, makeParticipant } from "./store"
 
 export function useQuorum(store) {
@@ -35,5 +37,5 @@ export function useQuorum(store) {
     [store, grid.numSlots],
   )
 
-  return { grid, event, heatmap: hm, best, peak, atLeast: (k) => availableAtLeast(event, k), actions }
+  return { grid, event, heatmap: hm, best, peak, actions }
 }

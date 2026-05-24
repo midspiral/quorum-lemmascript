@@ -259,23 +259,6 @@ button.ghost:disabled {
   color: var(--muted);
   border-style: dashed;
 }
-.thresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
-  margin-left: auto;
-}
-.thresh .k {
-  font-weight: 700;
-  color: var(--accent-ink);
-  min-width: 14px;
-}
-.thresh input[type="range"] {
-  accent-color: var(--accent);
-}
-
 /* the grid */
 .grid {
   display: grid;
@@ -351,11 +334,6 @@ button.ghost:disabled {
   line-height: 1;
   color: var(--accent-ink);
 }
-.cell.quorum {
-  outline: 2px dashed var(--accent-ink);
-  outline-offset: -2px;
-}
-
 /* summary */
 .summary {
   margin-top: 22px;
