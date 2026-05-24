@@ -15,7 +15,7 @@ implementation.
 ## What is verified
 
 The trustworthy artifact of a scheduler is the **aggregate**. `src/domain.ts` (85 VCs) and
-`src/grid.ts` (8 VCs) prove, with 0 errors:
+`src/grid.ts` (10 VCs) prove, with 0 errors:
 
 - **Aggregation** — `heatmap(e)[s]` is *exactly* the number of participants free at slot
   `s`, and is bounded by the participant count. `maxCount` is the attained maximum;
