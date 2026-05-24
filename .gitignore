@@ -1,0 +1,17 @@
+# Dependencies
+node_modules
+worker/node_modules
+
+# Build output
+dist
+.vite
+.wrangler
+
+# Env / local
+.env
+.env.local
+.DS_Store
+*.log
+
+# NOTE: src/*.dfy and src/*.dfy.gen are intentionally tracked — CI regenerates
+# and diff-checks them (see LemmaScript-files.txt).
