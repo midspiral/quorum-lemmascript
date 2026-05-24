@@ -401,3 +401,120 @@ lemma removeParticipant_ensures(e: Event, pid: string)
   // --- proof: removal keeps a sublist of width-matching rows ---
   removePPreservesLen_ensures(e.participants, pid, e.numSlots);
 }
+
+function contains(idxs: seq<int>, i: int): bool
+  decreases |idxs|
+{
+  if (|idxs| == 0) then
+    false
+  else
+    ((idxs[0] == i) || contains(idxs[1..], i))
+}
+
+function containsSnoc(xs: seq<int>, y: int, i: int): bool
+  decreases |xs|
+{
+  true
+}
+
+lemma containsSnoc_ensures(xs: seq<int>, y: int, i: int)
+  ensures (contains((xs + [y]), i) == (contains(xs, i) || (y == i)))
+{
+  // --- proof: induction on xs; (xs+[y])[1..] == xs[1..]+[y] ---
+  if (|xs| != 0) {
+    assert (xs + [y])[1..] == xs[1..] + [y];
+    containsSnoc_ensures(xs[1..], y, i);
+  } else {
+    assert (xs + [y]) == [y];
+  }
+}
+
+function sparsifyUpto(a: seq<bool>, k: int): seq<int>
+  requires (0 <= k)
+  requires (k <= |a|)
+  decreases k
+{
+  if (k == 0) then
+    []
+  else
+    var prev := sparsifyUpto(a, (k - 1));
+    if a[(k - 1)] then
+      (prev + [(k - 1)])
+    else
+      prev
+}
+
+lemma sparsifyUpto_ensures(a: seq<bool>, k: int)
+  requires (0 <= k)
+  requires (k <= |a|)
+  ensures forall i: int :: (contains(sparsifyUpto(a, k), i) == (((0 <= i) && (i < k)) && a[i]))
+{
+  // --- proof: induction on k. The IH characterizes membership up to k-1; when
+  // a[k-1] holds the result snocs k-1, so containsSnoc extends membership. ---
+  if (k != 0) {
+    sparsifyUpto_ensures(a, k - 1);
+    if (a[k - 1]) {
+      forall i { containsSnoc_ensures(sparsifyUpto(a, k - 1), k - 1, i); }
+    }
+  }
+}
+
+function sparsify(a: seq<bool>): seq<int>
+{
+  sparsifyUpto(a, |a|)
+}
+
+lemma sparsify_ensures(a: seq<bool>)
+  ensures forall i: int :: (contains(sparsify(a), i) == (((0 <= i) && (i < |a|)) && a[i]))
+{
+  // --- proof: sparsify(a) == sparsifyUpto(a, |a|) ---
+  sparsifyUpto_ensures(a, |a|);
+}
+
+function densifyUpto(idxs: seq<int>, k: int): seq<bool>
+  requires (0 <= k)
+  decreases k
+{
+  if (k == 0) then
+    []
+  else
+    var prev := densifyUpto(idxs, (k - 1));
+    (prev + [contains(idxs, (k - 1))])
+}
+
+lemma densifyUpto_ensures(idxs: seq<int>, k: int)
+  requires (0 <= k)
+  ensures (|densifyUpto(idxs, k)| == k)
+  ensures forall i: int :: ((0 <= i) ==> (i < k) ==> (densifyUpto(idxs, k)[i] == contains(idxs, i)))
+{
+}
+
+function densify(idxs: seq<int>, n: int): seq<bool>
+  requires (0 <= n)
+{
+  densifyUpto(idxs, n)
+}
+
+lemma densify_ensures(idxs: seq<int>, n: int)
+  requires (0 <= n)
+  ensures (|densify(idxs, n)| == n)
+  ensures forall i: int :: ((0 <= i) ==> (i < n) ==> (densify(idxs, n)[i] == contains(idxs, i)))
+{
+  // --- proof: densify(idxs, n) == densifyUpto(idxs, n) ---
+  densifyUpto_ensures(idxs, n);
+}
+
+function sparseRoundTrip(a: seq<bool>): bool
+{
+  true
+}
+
+lemma sparseRoundTrip_ensures(a: seq<bool>)
+  ensures (|densify(sparsify(a), |a|)| == |a|)
+  ensures forall i: int :: ((0 <= i) ==> (i < |a|) ==> (densify(sparsify(a), |a|)[i] == a[i]))
+{
+  // --- proof: densify reads contains(sparsify(a), i), which sparsify pins to
+  // a[i] for in-range i. ---
+  densify_ensures(sparsify(a), |a|);
+  sparsify_ensures(a);
+}

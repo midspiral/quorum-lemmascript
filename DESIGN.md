@@ -103,15 +103,15 @@ interface Event {
         │  enforces E3   │               │  (the corpus)   │
         └────────────────┘               └─────────────────┘
 
-        ╔══════════════════════════════════════════════════════════════╗
-        ║  VERIFIED pure core — src/domain.ts (//@ verify)             ║
-        ║  [proved] wellFormed/allAvailLen, countFree, heatmap,        ║
-        ║    maxCount, isBest, availableAtLeast; countFree homomorphism ║
-        ║    (convergence core); init/add/setAvailability/removeP      ║
-        ║    (Inv-preserving mutations)                                ║
-        ║  [planned] sparsify/densify codec (E1); participantsAt,      ║
-        ║    overlap (queries); applyOp/replay (op-log, for D1/D2)     ║
-        ╚══════════════════════════════════════════════════════════════╝
+    ╔═══════════════════════════════════════════════════════════════╗
+    ║  VERIFIED pure core — src/domain.ts (//@ verify)              ║
+    ║  [proved] wellFormed/allAvailLen, countFree, heatmap,         ║
+    ║    maxCount, isBest, availableAtLeast; countFree homomorphism ║
+    ║    (convergence core); init/add/setAvailability/removeP       ║
+    ║    (Inv-preserving mutations); sparsify/densify codec (E1)    ║
+    ║  [planned] participantsAt, overlap (queries);                 ║
+    ║    applyOp/replay (op-log, for D1/D2)                         ║
+    ╚═══════════════════════════════════════════════════════════════╝
 ```
 
 **Hosting: Cloudflare, one Durable Object per event.** The DO is single-threaded, so it serializes all writes to an event into a *total order* for free. Two things make this elegant:
@@ -127,7 +127,7 @@ interface Event {
 
 ## 7. Properties — the staged catalog
 
-Properties are grouped into families and sequenced into stages. We design the data model now so every family is reachable; we prove them in order. Spec sketches below use LemmaScript syntax (`forall(k, P)`, `\result`, no `\old`). **Families A1, B, the C4 threshold, and the Family-D convergence core are implemented and verified (`src/domain.ts`, 31 VCs, 0 errors) — those specs are the real ones; the rest are illustrative and get pinned during implementation.**
+Properties are grouped into families and sequenced into stages. We design the data model now so every family is reachable; we prove them in order. Spec sketches below use LemmaScript syntax (`forall(k, P)`, `\result`, no `\old`). **Families A1, B, the C4 threshold, the Family-D convergence core, the Stage-0b mutations, and the E1 sparse-codec round-trip are implemented and verified (`src/domain.ts`, 62 VCs, 0 errors) — those specs are the real ones; the rest are illustrative and get pinned during implementation.**
 
 A note from Stage 0 that shapes the specs: LemmaScript emits each pure function's `//@ ensures` as a *separate* `_ensures` lemma rather than a Dafny postcondition. So a function cannot rely on a callee's `ensures` inside its own body — callee preconditions must be discharged structurally. This pushed three concrete choices: aggregation is written as **pure recursive functions** (not imperative loops, which can't take proof hints); the counting core is **total** (`freeAt` guards the bit access) so it carries no precondition and composes freely; and `maxCount` is **precondition-free** for the same reason.
 
@@ -227,24 +227,24 @@ This is the formal "why login-free merge is safe": the aggregate factors through
 - **Op model / replay** (`applyOp`, `replay`) — the operational wrapper (join / setAvail with timestamps) over which D1/D2 are ultimately stated; deferred until the mutations (Stage 0b) land.
 
 ### Family E — Export faithfulness + query soundness
+The dense⟷sparse codec is **implemented & verified**, characterized through membership (`contains`) rather than sortedness — `i` is in `sparsify(a)` iff `a[i]` is an in-range true bit, and `densify` reads `contains` pointwise, so the round-trip is the identity.
+
 ```ts
-// dense ⟷ sparse codec (the real content of the round-trip)
-//@ ensures sorted(\result) && forall(i, 0 <= \result[i] && \result[i] < a.length)
+// i is a member of the sparse encoding iff it is an in-range true bit of a.
+//@ ensures forall(i, contains(\result, i) === (0 <= i && i < a.length && a[i]))
 function sparsify(a: boolean[]): number[]
 
-//@ requires sorted(idxs) && forall(i, 0 <= idxs[i] && idxs[i] < n)
+//@ requires 0 <= n
 //@ ensures \result.length === n
+//@ ensures forall(i, 0 <= i && i < n ==> \result[i] === contains(idxs, i))
 function densify(idxs: number[], n: number): boolean[]
 
-// E1 round-trip
-//@ ensures forall(s, 0 <= s && s < a.length ==> densify(sparsify(a), a.length)[s] === a[s])
+// E1 round-trip — densify ∘ sparsify is the identity on a bitset (export loses nothing).
+//@ ensures densify(sparsify(a), a.length).length === a.length
+//@ ensures forall(i, 0 <= i && i < a.length ==> densify(sparsify(a), a.length)[i] === a[i])
 function sparseRoundTrip(a: boolean[]): boolean { return true; }
-
-// E1 at the event level → decodeEvent ∘ encodeEvent = id on well-formed events
-//@ requires Inv(e)
-//@ ensures eventEq(decodeEvent(encodeEvent(e)), e)
-function eventRoundTrip(e: Event): boolean { return true; }
 ```
+(Event-level `decodeEvent ∘ encodeEvent = id` is the remaining plumbing: `id`/`title`/`numSlots` are scalars and each participant's `avail` round-trips by the lemma above.)
 - **E2 (query-over-export soundness)** — corollary of E1 + purity: for any query `Q`, `Q(decodeEvent(encodeEvent(e))) === Q(e)`. Stated directly for `isBest`, `availableAtLeast`, `participantsAt`.
 - **E3 (append-only integrity)** — enforced at D1 by `PRIMARY KEY (event_id, op_seq)`; the corpus is immutable and re-export is deterministic. (DB-enforced, not in-code — stated as a trusted mechanism, like trace-solo's P3.)
 - **E4 (canonical encoding)** — `encodeEvent` is a function (same event → same bytes), so exports are reproducible and diffable.
@@ -277,7 +277,7 @@ function overlap(e: Event, pids: string[]): number[]
 | **0 — spine** | Total `countFree`/`freeAt`, `heatmap`/`maxCount`/`isBest`/`availableAtLeast` (count-correctness, boundedness, best mask, threshold). | A1, B, C4 | ✅ **verified** |
 | **2 — convergence (core)** | `countFreeConcat` homomorphism, `countFreeComm` batch commutativity, `heatmapBatchOrderInvariant` — order-independence of the heatmap under participant batches. | D (core) | ✅ **verified** |
 | **0b — mutations** | `initEvent`/`addParticipant`/`setAvailability`/`removeParticipant` preserve `Inv`. | A | ✅ **verified** |
-| **0b — codec** | sparse codec `densify(sparsify) == id`. Makes the core exportable. | E1 | next |
+| **0b — codec** | sparse codec `densify(sparsify) == id` (membership-characterized). | E1 | ✅ **verified** |
 | **1 — monotonicity** | `heatmapMonotoneUnderJoin`, `unanimousIsBest`. Cheap given B. | C | |
 | **2b — convergence (deep)** | op model + `replay`; D2 (same-participant LWW); D1 full permutation-invariance (needs `multiset` in specs — see `LS_TODO.md`). | D | |
 | **3 — query layer** | `participantsAt`, `overlap` (needs A2 id-uniqueness); query-over-export soundness E2; canonical encoding E4. | F, E2, E4 | |

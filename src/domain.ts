@@ -297,3 +297,75 @@ export function removeParticipant(e: Event, pid: string): Event {
   //@ ensures \result.numSlots === e.numSlots
   return { ...e, participants: removeP(e.participants, pid) }
 }
+
+// ── Sparse availability codec (Stage 0b / E1): round-trips ─────
+//
+// Export uses a sparse representation — the sorted indices where a participant
+// is free — instead of the dense bitset. `densify(sparsify(a)) === a` proves
+// the export is faithful: decoding reconstructs the exact availability.
+
+// Membership of index `i` in a sparse index list.
+export function contains(idxs: number[], i: number): boolean {
+  //@ verify
+  //@ decreases idxs.length
+  if (idxs.length === 0) return false
+  if (idxs[0] === i) return true
+  return contains(idxs.slice(1), i)
+}
+
+// Appending an index `y` adds exactly `y` to the membership set.
+export function containsSnoc(xs: number[], y: number, i: number): boolean {
+  //@ verify
+  //@ decreases xs.length
+  //@ ensures contains(xs.concat([y]), i) === (contains(xs, i) || y === i)
+  return true
+}
+
+// Indices in [0, k) where `a` is true. Characterized by membership: i is in the
+// result iff i is an in-range true bit of a.
+export function sparsifyUpto(a: boolean[], k: number): number[] {
+  //@ verify
+  //@ requires 0 <= k && k <= a.length
+  //@ decreases k
+  //@ ensures forall(i, contains(\result, i) === (0 <= i && i < k && a[i]))
+  if (k === 0) return []
+  const prev = sparsifyUpto(a, k - 1)
+  return a[k - 1] ? [...prev, k - 1] : prev
+}
+
+// The sparse encoding of an availability bitset: its true-indices.
+export function sparsify(a: boolean[]): number[] {
+  //@ verify
+  //@ ensures forall(i, contains(\result, i) === (0 <= i && i < a.length && a[i]))
+  return sparsifyUpto(a, a.length)
+}
+
+// Dense bitset of length k whose bit i is set iff i is in `idxs`.
+export function densifyUpto(idxs: number[], k: number): boolean[] {
+  //@ verify
+  //@ requires 0 <= k
+  //@ decreases k
+  //@ ensures \result.length === k
+  //@ ensures forall(i, 0 <= i && i < k ==> \result[i] === contains(idxs, i))
+  if (k === 0) return []
+  const prev = densifyUpto(idxs, k - 1)
+  return [...prev, contains(idxs, k - 1)]
+}
+
+// Decode a sparse index list back into a dense bitset of width `n`.
+export function densify(idxs: number[], n: number): boolean[] {
+  //@ verify
+  //@ requires 0 <= n
+  //@ ensures \result.length === n
+  //@ ensures forall(i, 0 <= i && i < n ==> \result[i] === contains(idxs, i))
+  return densifyUpto(idxs, n)
+}
+
+// E1 round-trip: densify ∘ sparsify is the identity on a bitset — the sparse
+// export loses nothing.
+export function sparseRoundTrip(a: boolean[]): boolean {
+  //@ verify
+  //@ ensures densify(sparsify(a), a.length).length === a.length
+  //@ ensures forall(i, 0 <= i && i < a.length ==> densify(sparsify(a), a.length)[i] === a[i])
+  return true
+}
