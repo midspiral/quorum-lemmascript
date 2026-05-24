@@ -83,11 +83,6 @@ function Landing() {
     <main className="landing">
       <div className="hero">
         <h1>Find the time that works.</h1>
-        <p className="sub">
-          Pick the dates (or just the days of the week), share the link, paint your availability.
-          The best slot surfaces itself — and the heatmap, the recommendation, and the export are
-          all backed by a formally verified core.
-        </p>
       </div>
 
       <div className="card create">
