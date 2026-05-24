@@ -6,13 +6,34 @@
 
 import { gridIndex } from "./grid"
 
+export type GridKind = "dates" | "weekdays"
+
+export interface Grid {
+  title: string
+  kind: GridKind
+  cols: (string | number)[] // ISO date strings (dates) | weekday numbers 0–6 (weekdays)
+  times: number[] // minutes-from-midnight for each slot-of-day
+  slotMinutes: number
+  slotsPerDay: number
+  numDays: number
+  numSlots: number
+}
+
+export interface GridParams {
+  title: string
+  kind: GridKind
+  cols: (string | number)[]
+  startHour: number
+  endHour: number
+  slotMinutes: number
+}
+
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-// Build grid metadata. `kind` is "dates" (cols = sorted ISO date strings) or
-// "weekdays" (cols = sorted weekday numbers 0–6). Each column is split into
-// [startHour, endHour) at `slotMinutes`. numSlots === cols.length * slotsPerDay.
-export function buildGrid({ title, kind, cols, startHour, endHour, slotMinutes }) {
-  const times = []
+// Build grid metadata. Each column is split into [startHour, endHour) at
+// `slotMinutes`. numSlots === cols.length * slotsPerDay.
+export function buildGrid({ title, kind, cols, startHour, endHour, slotMinutes }: GridParams): Grid {
+  const times: number[] = []
   for (let m = startHour * 60; m < endHour * 60; m += slotMinutes) times.push(m)
   const slotsPerDay = times.length
   return {
@@ -28,19 +49,19 @@ export function buildGrid({ title, kind, cols, startHour, endHour, slotMinutes }
 }
 
 // Cell (colIdx, timeIdx) → flat slot index, via the verified forward map.
-export function cellSlot(grid, colIdx, timeIdx) {
+export function cellSlot(grid: Grid, colIdx: number, timeIdx: number): number {
   return gridIndex(grid.slotsPerDay, colIdx, timeIdx)
 }
 
 // Column header: { dow, num } where `num` is the big line. Dates show the
 // weekday over the date number; weekdays show the weekday name as the big line.
-export function colLabel(grid, colIdx) {
-  if (grid.kind === "weekdays") return { dow: "", num: DOW[grid.cols[colIdx]] }
-  const d = new Date(grid.cols[colIdx] + "T00:00:00")
+export function colLabel(grid: Grid, colIdx: number): { dow: string; num: string } {
+  if (grid.kind === "weekdays") return { dow: "", num: DOW[grid.cols[colIdx] as number] }
+  const d = new Date((grid.cols[colIdx] as string) + "T00:00:00")
   return { dow: DOW[d.getDay()], num: String(d.getDate()) }
 }
 
-export function timeLabel(grid, timeIdx) {
+export function timeLabel(grid: Grid, timeIdx: number): string {
   const m = grid.times[timeIdx]
   let h = Math.floor(m / 60)
   const min = m % 60
@@ -51,7 +72,7 @@ export function timeLabel(grid, timeIdx) {
 }
 
 // Human label for a flat slot index (used in the best-slots summary).
-export function slotLabel(grid, slot) {
+export function slotLabel(grid: Grid, slot: number): string {
   const colIdx = Math.floor(slot / grid.slotsPerDay)
   const timeIdx = slot % grid.slotsPerDay
   const { dow, num } = colLabel(grid, colIdx)

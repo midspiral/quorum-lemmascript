@@ -5,10 +5,25 @@
 // already shows the per-slot count.)
 
 import { useSyncExternalStore, useMemo } from "react"
-import { heatmap, isBest, maxCount } from "./domain"
-import { opJoin, opSetAvail, makeParticipant } from "./store"
+import { heatmap, isBest, maxCount, type Event } from "./domain"
+import { opJoin, opSetAvail, makeParticipant, type Store } from "./store"
+import type { Grid } from "./gridShell"
 
-export function useQuorum(store) {
+export interface QuorumActions {
+  join(name: string): string
+  setCell(pid: string, slot: number, value: boolean): void
+}
+
+export interface QuorumView {
+  grid: Grid
+  event: Event
+  heatmap: number[]
+  best: boolean[]
+  peak: number
+  actions: QuorumActions
+}
+
+export function useQuorum(store: Store): QuorumView {
   const snap = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { grid, event } = snap
 
@@ -16,7 +31,7 @@ export function useQuorum(store) {
   const best = useMemo(() => isBest(event), [event])
   const peak = useMemo(() => maxCount(hm), [hm])
 
-  const actions = useMemo(
+  const actions = useMemo<QuorumActions>(
     () => ({
       join(name) {
         const pid = `p-${store.tick()}-${Math.random().toString(36).slice(2, 6)}`

@@ -1,12 +1,30 @@
 import { useEffect, useRef } from "react"
-import { cellSlot, colLabel, timeLabel } from "../gridShell"
+import type { CSSProperties, PointerEvent } from "react"
+import { cellSlot, colLabel, timeLabel, type Grid as GridModel } from "../gridShell"
+
+type Mode = "paint" | "group"
+
+interface GridProps {
+  grid: GridModel
+  mode: Mode
+  row: boolean[] | null
+  heatmap: number[]
+  best: boolean[]
+  peak: number
+  onSetCell: (slot: number, value: boolean) => void
+}
+
+interface PaintState {
+  active: boolean
+  value: boolean
+}
 
 // The single grid. Paint mode: cells reflect `row` (the active participant's
 // availability); drag to paint. Group mode: heatmap intensity + best-slot ring.
 // Every value shown is supplied by verified functions via props — this
 // component only renders and captures gestures.
-export default function Grid({ grid, mode, row, heatmap, best, peak, onSetCell }) {
-  const paint = useRef({ active: false, value: false })
+export default function Grid({ grid, mode, row, heatmap, best, peak, onSetCell }: GridProps) {
+  const paint = useRef<PaintState>({ active: false, value: false })
 
   useEffect(() => {
     const stop = () => (paint.current.active = false)
@@ -47,7 +65,13 @@ export default function Grid({ grid, mode, row, heatmap, best, peak, onSetCell }
   )
 }
 
-function Row({ grid, t, mode, row, heatmap, best, peak, paint, onSetCell }) {
+interface RowProps extends Omit<GridProps, "row"> {
+  t: number
+  row: boolean[] | null
+  paint: { current: PaintState }
+}
+
+function Row({ grid, t, mode, row, heatmap, best, peak, paint, onSetCell }: RowProps) {
   return (
     <>
       <div className="timelabel">{timeLabel(grid, t)}</div>
@@ -56,7 +80,7 @@ function Row({ grid, t, mode, row, heatmap, best, peak, paint, onSetCell }) {
         const count = heatmap[slot]
 
         const cls = ["cell"]
-        let style
+        let style: CSSProperties | undefined
         if (mode === "paint") {
           if (row && row[slot]) cls.push("on")
         } else {
@@ -71,7 +95,7 @@ function Row({ grid, t, mode, row, heatmap, best, peak, paint, onSetCell }) {
 
         const onDown =
           mode === "paint"
-            ? (e) => {
+            ? (e: PointerEvent) => {
                 e.preventDefault()
                 const value = !(row && row[slot])
                 paint.current = { active: true, value }
@@ -86,13 +110,7 @@ function Row({ grid, t, mode, row, heatmap, best, peak, paint, onSetCell }) {
             : undefined
 
         return (
-          <div
-            key={d}
-            className={cls.join(" ")}
-            style={style}
-            onPointerDown={onDown}
-            onPointerEnter={onEnter}
-          >
+          <div key={d} className={cls.join(" ")} style={style} onPointerDown={onDown} onPointerEnter={onEnter}>
             {mode === "group" && count > 0 ? <span className="count">{count}</span> : null}
           </div>
         )

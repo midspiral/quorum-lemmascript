@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
-import { createEvent, loadStore, listEvents } from "./store"
+import { createEvent, loadStore, listEvents, type Store } from "./store"
 import { useQuorum } from "./useQuorum"
-import { slotLabel } from "./gridShell"
-import { sparsify } from "./domain"
-import Grid from "./components/Grid"
+import { slotLabel, type Grid, type GridKind } from "./gridShell"
+import { sparsify, type Event } from "./domain"
+import GridView from "./components/Grid"
 
 // ── hash routing: "#e=<id>" → event, else landing ──
-function useRoute() {
+function useRoute(): string | null {
   const read = () => new URLSearchParams(location.hash.slice(1)).get("e")
-  const [id, setId] = useState(read)
+  const [id, setId] = useState<string | null>(read)
   useEffect(() => {
     const on = () => setId(read())
     window.addEventListener("hashchange", on)
@@ -17,7 +17,7 @@ function useRoute() {
   return id
 }
 
-const go = (id) => {
+const go = (id: string | null) => {
   location.hash = id ? `e=${id}` : ""
 }
 
@@ -39,19 +39,17 @@ export default function App() {
 // ─────────────────────────── Landing ───────────────────────────
 function Landing() {
   const [title, setTitle] = useState("")
-  const [kind, setKind] = useState("dates") // "dates" | "weekdays"
-  const [dates, setDates] = useState(() => new Set())
-  const [weekdays, setWeekdays] = useState(() => new Set())
+  const [kind, setKind] = useState<GridKind>("dates")
+  const [dates, setDates] = useState<Set<string>>(() => new Set())
+  const [weekdays, setWeekdays] = useState<Set<number>>(() => new Set())
   const [startHour, setStartHour] = useState(9)
   const [endHour, setEndHour] = useState(17)
   const [slotMinutes, setSlotMinutes] = useState(60)
   const recent = listEvents()
 
-  const cols =
-    kind === "dates"
-      ? [...dates].sort()
-      : [...weekdays].sort((a, b) => a - b)
-  const valid = title.trim() && cols.length >= 1 && endHour > startHour
+  const cols: (string | number)[] =
+    kind === "dates" ? [...dates].sort() : [...weekdays].sort((a, b) => a - b)
+  const valid = title.trim() !== "" && cols.length >= 1 && endHour > startHour
 
   const create = () => {
     if (!valid) return
@@ -59,13 +57,13 @@ function Landing() {
     go(store.id)
   }
 
-  const toggleDate = (iso) =>
+  const toggleDate = (k: string) =>
     setDates((s) => {
       const n = new Set(s)
-      n.has(iso) ? n.delete(iso) : n.add(iso)
+      n.has(k) ? n.delete(k) : n.add(k)
       return n
     })
-  const toggleWeekday = (i) =>
+  const toggleWeekday = (i: number) =>
     setWeekdays((s) => {
       const n = new Set(s)
       n.has(i) ? n.delete(i) : n.add(i)
@@ -169,7 +167,7 @@ function Landing() {
 }
 
 const hours = Array.from({ length: 25 }, (_, i) => i)
-function hourLabel(h) {
+function hourLabel(h: number): string {
   if (h === 0 || h === 24) return "12 AM"
   if (h === 12) return "12 PM"
   return h < 12 ? `${h} AM` : `${h - 12} PM`
@@ -180,25 +178,25 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ]
 const DOW_MINI = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
-const iso = (dt) =>
+const iso = (dt: Date) =>
   `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`
 
 // Sunday-start month calendar with multi-select and prev/next nav. Past days
 // are disabled. Selected ISO date strings flow up via onToggle.
-function MonthCalendar({ selected, onToggle }) {
+function MonthCalendar({ selected, onToggle }: { selected: Set<string>; onToggle: (iso: string) => void }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const [view, setView] = useState({ y: today.getFullYear(), m: today.getMonth() })
+  const [view, setView] = useState<{ y: number; m: number }>({ y: today.getFullYear(), m: today.getMonth() })
 
   const first = new Date(view.y, view.m, 1)
   const startDow = first.getDay()
   const daysInMonth = new Date(view.y, view.m + 1, 0).getDate()
-  const cells = []
+  const cells: (Date | null)[] = []
   for (let i = 0; i < startDow; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(view.y, view.m, d))
   while (cells.length % 7) cells.push(null)
 
-  const shift = (delta) => {
+  const shift = (delta: number) => {
     const d = new Date(view.y, view.m + delta, 1)
     setView({ y: d.getFullYear(), m: d.getMonth() })
   }
@@ -243,7 +241,7 @@ function MonthCalendar({ selected, onToggle }) {
   )
 }
 
-function WeekdayPicker({ selected, onToggle }) {
+function WeekdayPicker({ selected, onToggle }: { selected: Set<number>; onToggle: (i: number) => void }) {
   const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   return (
     <div className="wdpick">
@@ -262,25 +260,25 @@ function WeekdayPicker({ selected, onToggle }) {
 }
 
 // ────────────────────────── Event view ──────────────────────────
-function EventView({ id }) {
+function EventView({ id }: { id: string }) {
   const store = useMemo(() => loadStore(id), [id])
   if (!store) return <NotFound />
   return <EventBody store={store} id={id} />
 }
 
-function EventBody({ store, id }) {
+function EventBody({ store, id }: { store: Store; id: string }) {
   const { grid, event, heatmap, best, peak, actions } = useQuorum(store)
   const meKey = `quorum:me:${id}`
-  const [me, setMe] = useState(() => localStorage.getItem(meKey))
-  const [active, setActive] = useState(me)
-  const [mode, setMode] = useState(me ? "paint" : "group")
+  const [me, setMe] = useState<string | null>(() => localStorage.getItem(meKey))
+  const [active, setActive] = useState<string | null>(me)
+  const [mode, setMode] = useState<"paint" | "group">(me ? "paint" : "group")
   const [copied, setCopied] = useState(false)
 
   const n = event.participants.length
   const activeP = event.participants.find((p) => p.id === active)
   const bestSlots = best.map((b, s) => (b ? s : -1)).filter((s) => s >= 0)
 
-  const join = (name) => {
+  const join = (name: string) => {
     const pid = actions.join(name || "Me")
     localStorage.setItem(meKey, pid)
     setMe(pid)
@@ -356,7 +354,7 @@ function EventBody({ store, id }) {
         </div>
       )}
 
-      <Grid
+      <GridView
         grid={grid}
         mode={me ? mode : "group"}
         row={activeP ? activeP.avail : null}
@@ -372,7 +370,9 @@ function EventBody({ store, id }) {
             <p className="muted">Paint some availability to see the best times.</p>
           ) : (
             <>
-              <h3>★ Best {bestSlots.length === 1 ? "time" : "times"} ({peak} of {n})</h3>
+              <h3>
+                ★ Best {bestSlots.length === 1 ? "time" : "times"} ({peak} of {n})
+              </h3>
               <ul className="bestlist">
                 {bestSlots.map((s) => (
                   <li key={s}>{slotLabel(grid, s)}</li>
@@ -386,7 +386,7 @@ function EventBody({ store, id }) {
   )
 }
 
-function JoinPrompt({ onJoin }) {
+function JoinPrompt({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState("")
   return (
     <div className="card join">
@@ -401,7 +401,7 @@ function JoinPrompt({ onJoin }) {
         />
       </label>
       <button className="primary" onClick={() => onJoin(name.trim())}>
-        Join & paint
+        Join &amp; paint
       </button>
     </div>
   )
@@ -421,7 +421,7 @@ function NotFound() {
 }
 
 // NDJSON export uses the verified sparse codec (sparsify) for each row.
-function downloadNDJSON(grid, event) {
+function downloadNDJSON(grid: Grid, event: Event) {
   const lines = [
     JSON.stringify({
       type: "event",

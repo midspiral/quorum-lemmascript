@@ -1,31 +1,55 @@
 // The transport seam. Every change to an event flows through `dispatch(op)`,
 // which applies it with the VERIFIED applyOp() from domain.ts. Today the store
 // is local (in-memory + localStorage); a future RemoteStore (WebSocket → a
-// Cloudflare Durable Object) implements the same {getSnapshot, subscribe,
-// dispatch} interface, so none of the UI changes when real sync lands.
+// Cloudflare Durable Object) implements the same Store interface below, so none
+// of the UI changes when real sync lands.
 //
 // This is the ONLY module that imports applyOp. The op log it produces is
 // exactly what `replay` (also verified) would fold back into the same state.
 
-import { initEvent, applyOp } from "./domain"
-import { buildGrid } from "./gridShell"
+import { initEvent, applyOp, type Event, type Participant } from "./domain"
+import { buildGrid, type Grid, type GridParams } from "./gridShell"
 
-const eventKey = (id) => `quorum:event:${id}`
+// The op shape domain.ts's applyOp consumes (structurally matches its internal
+// Op union — we don't import the unexported type, we restate the shape).
+export type Op =
+  | { kind: "join"; p: Participant }
+  | { kind: "setAvail"; pid: string; avail: boolean[]; at: number }
+
+export interface Snapshot {
+  grid: Grid
+  event: Event
+}
+
+export interface Store {
+  id: string
+  getSnapshot(): Snapshot
+  subscribe(fn: () => void): () => void
+  tick(): number
+  dispatch(op: Op): void
+}
+
+interface IndexEntry {
+  id: string
+  title: string
+  createdAt: number
+}
+
+const eventKey = (id: string) => `quorum:event:${id}`
 const INDEX_KEY = "quorum:index"
 
-function shortId() {
+function shortId(): string {
   return Math.random().toString(36).slice(2, 8)
 }
 
-export function makeParticipant(id, name, numSlots) {
+export function makeParticipant(id: string, name: string, numSlots: number): Participant {
   return { id, name, avail: new Array(numSlots).fill(false), updatedAt: 0 }
 }
 
-// Op builders (the shapes domain.ts's applyOp consumes).
-export const opJoin = (p) => ({ kind: "join", p })
-export const opSetAvail = (pid, avail, at) => ({ kind: "setAvail", pid, avail, at })
+export const opJoin = (p: Participant): Op => ({ kind: "join", p })
+export const opSetAvail = (pid: string, avail: boolean[], at: number): Op => ({ kind: "setAvail", pid, avail, at })
 
-function readIndex() {
+function readIndex(): IndexEntry[] {
   try {
     return JSON.parse(localStorage.getItem(INDEX_KEY) || "[]")
   } catch {
@@ -33,21 +57,21 @@ function readIndex() {
   }
 }
 
-function writeIndex(list) {
+function writeIndex(list: IndexEntry[]): void {
   localStorage.setItem(INDEX_KEY, JSON.stringify(list))
 }
 
-export function listEvents() {
+export function listEvents(): IndexEntry[] {
   return readIndex()
 }
 
-function makeStore(id, initial) {
-  let snap = initial // { grid, event }
+function makeStore(id: string, initial: Snapshot): Store {
+  let snap = initial
   // Monotonic logical clock for LWW timestamps (strictly increasing, so two
   // edits in the same millisecond don't collide under the LWW guard).
   let clock = 0
   for (const p of snap.event.participants) clock = Math.max(clock, p.updatedAt)
-  const listeners = new Set()
+  const listeners = new Set<() => void>()
   const persist = () => localStorage.setItem(eventKey(id), JSON.stringify(snap))
 
   return {
@@ -69,7 +93,7 @@ function makeStore(id, initial) {
   }
 }
 
-export function createEvent(params) {
+export function createEvent(params: GridParams): Store {
   const id = shortId()
   const grid = buildGrid(params)
   const event = initEvent(id, params.title, grid.numSlots) // verified: wellFormed, no participants
@@ -80,7 +104,7 @@ export function createEvent(params) {
   return makeStore(id, { grid, event })
 }
 
-export function loadStore(id) {
+export function loadStore(id: string): Store | null {
   const raw = localStorage.getItem(eventKey(id))
   if (!raw) return null
   try {
@@ -91,7 +115,7 @@ export function loadStore(id) {
       snap.grid.cols = snap.grid.dates
       snap.grid.kind = "dates"
     }
-    return makeStore(id, snap)
+    return makeStore(id, snap as Snapshot)
   } catch {
     return null
   }
