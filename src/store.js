@@ -86,6 +86,11 @@ export function loadStore(id) {
   try {
     const snap = JSON.parse(raw)
     if (!snap || !snap.grid || !snap.event) return null
+    // Migrate pre-"cols" events (grid had `dates` only).
+    if (snap.grid.dates && !snap.grid.cols) {
+      snap.grid.cols = snap.grid.dates
+      snap.grid.kind = "dates"
+    }
     return makeStore(id, snap)
   } catch {
     return null

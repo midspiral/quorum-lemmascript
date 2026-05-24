@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { cellSlot, dayLabel, timeLabel } from "../gridShell"
+import { cellSlot, colLabel, timeLabel } from "../gridShell"
 
 // The single grid. Paint mode: cells reflect `row` (the active participant's
 // availability); drag to paint. Group mode: heatmap intensity + best-slot ring
@@ -19,8 +19,8 @@ export default function Grid({ grid, mode, row, heatmap, best, peak, threshold, 
   return (
     <div className="grid" style={{ gridTemplateColumns: cols }}>
       <div className="corner" />
-      {grid.dates.map((_, d) => {
-        const { dow, num } = dayLabel(grid, d)
+      {grid.cols.map((_, d) => {
+        const { dow, num } = colLabel(grid, d)
         return (
           <div key={d} className="dayhead">
             <span className="dow">{dow}</span>
@@ -52,7 +52,7 @@ function Row({ grid, t, mode, row, heatmap, best, peak, threshold, paint, onSetC
   return (
     <>
       <div className="timelabel">{timeLabel(grid, t)}</div>
-      {grid.dates.map((_, d) => {
+      {grid.cols.map((_, d) => {
         const slot = cellSlot(grid, d, t)
         const count = heatmap[slot]
 

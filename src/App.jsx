@@ -39,28 +39,47 @@ export default function App() {
 // ─────────────────────────── Landing ───────────────────────────
 function Landing() {
   const [title, setTitle] = useState("")
-  const [days, setDays] = useState(5)
+  const [kind, setKind] = useState("dates") // "dates" | "weekdays"
+  const [dates, setDates] = useState(() => new Set())
+  const [weekdays, setWeekdays] = useState(() => new Set())
   const [startHour, setStartHour] = useState(9)
   const [endHour, setEndHour] = useState(17)
   const [slotMinutes, setSlotMinutes] = useState(60)
   const recent = listEvents()
 
-  const valid = title.trim() && days >= 1 && endHour > startHour
+  const cols =
+    kind === "dates"
+      ? [...dates].sort()
+      : [...weekdays].sort((a, b) => a - b)
+  const valid = title.trim() && cols.length >= 1 && endHour > startHour
 
   const create = () => {
     if (!valid) return
-    const store = createEvent({ title: title.trim(), days, startHour, endHour, slotMinutes })
+    const store = createEvent({ title: title.trim(), kind, cols, startHour, endHour, slotMinutes })
     go(store.id)
   }
+
+  const toggleDate = (iso) =>
+    setDates((s) => {
+      const n = new Set(s)
+      n.has(iso) ? n.delete(iso) : n.add(iso)
+      return n
+    })
+  const toggleWeekday = (i) =>
+    setWeekdays((s) => {
+      const n = new Set(s)
+      n.has(i) ? n.delete(i) : n.add(i)
+      return n
+    })
 
   return (
     <main className="landing">
       <div className="hero">
         <h1>Find the time that works.</h1>
         <p className="sub">
-          Pick a window, share the link, paint your availability. The best slot surfaces itself —
-          and the heatmap, the recommendation, and the export are all backed by a formally verified
-          core.
+          Pick the dates (or just the days of the week), share the link, paint your availability.
+          The best slot surfaces itself — and the heatmap, the recommendation, and the export are
+          all backed by a formally verified core.
         </p>
       </div>
 
@@ -75,11 +94,30 @@ function Landing() {
             onKeyDown={(e) => e.key === "Enter" && create()}
           />
         </label>
+
+        <div className="field">
+          <span>What are you scheduling?</span>
+          <div className="toggle modepick">
+            <button type="button" className={kind === "dates" ? "on" : ""} onClick={() => setKind("dates")}>
+              Specific dates
+            </button>
+            <button
+              type="button"
+              className={kind === "weekdays" ? "on" : ""}
+              onClick={() => setKind("weekdays")}
+            >
+              Days of the week
+            </button>
+          </div>
+        </div>
+
+        {kind === "dates" ? (
+          <MonthCalendar selected={dates} onToggle={toggleDate} />
+        ) : (
+          <WeekdayPicker selected={weekdays} onToggle={toggleWeekday} />
+        )}
+
         <div className="row3">
-          <label className="field">
-            <span>Days</span>
-            <input type="number" min="1" max="14" value={days} onChange={(e) => setDays(+e.target.value)} />
-          </label>
           <label className="field">
             <span>From</span>
             <select value={startHour} onChange={(e) => setStartHour(+e.target.value)}>
@@ -108,8 +146,9 @@ function Landing() {
             </select>
           </label>
         </div>
+
         <button className="primary" disabled={!valid} onClick={create}>
-          Create event
+          {cols.length > 0 ? `Create · ${cols.length} ${kind === "dates" ? "dates" : "days"}` : "Create event"}
         </button>
       </div>
 
@@ -134,6 +173,92 @@ function hourLabel(h) {
   if (h === 0 || h === 24) return "12 AM"
   if (h === 12) return "12 PM"
   return h < 12 ? `${h} AM` : `${h - 12} PM`
+}
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+]
+const DOW_MINI = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+const iso = (dt) =>
+  `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`
+
+// Sunday-start month calendar with multi-select and prev/next nav. Past days
+// are disabled. Selected ISO date strings flow up via onToggle.
+function MonthCalendar({ selected, onToggle }) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const [view, setView] = useState({ y: today.getFullYear(), m: today.getMonth() })
+
+  const first = new Date(view.y, view.m, 1)
+  const startDow = first.getDay()
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < startDow; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(view.y, view.m, d))
+  while (cells.length % 7) cells.push(null)
+
+  const shift = (delta) => {
+    const d = new Date(view.y, view.m + delta, 1)
+    setView({ y: d.getFullYear(), m: d.getMonth() })
+  }
+
+  return (
+    <div className="cal">
+      <div className="cal-head">
+        <button type="button" className="cal-nav" onClick={() => shift(-1)} aria-label="Previous month">
+          ‹
+        </button>
+        <span>
+          {MONTHS[view.m]} {view.y}
+        </span>
+        <button type="button" className="cal-nav" onClick={() => shift(1)} aria-label="Next month">
+          ›
+        </button>
+      </div>
+      <div className="cal-grid">
+        {DOW_MINI.map((d, i) => (
+          <div key={i} className="cal-dow">
+            {d}
+          </div>
+        ))}
+        {cells.map((dt, i) => {
+          if (!dt) return <div key={i} className="cal-empty" />
+          const k = iso(dt)
+          const past = dt < today
+          return (
+            <button
+              key={i}
+              type="button"
+              disabled={past}
+              className={`cal-day ${selected.has(k) ? "sel" : ""}`}
+              onClick={() => onToggle(k)}
+            >
+              {dt.getDate()}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function WeekdayPicker({ selected, onToggle }) {
+  const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  return (
+    <div className="wdpick">
+      {names.map((n, i) => (
+        <button
+          key={i}
+          type="button"
+          className={`chip ${selected.has(i) ? "active" : ""}`}
+          onClick={() => onToggle(i)}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 // ────────────────────────── Event view ──────────────────────────
@@ -318,7 +443,8 @@ function downloadNDJSON(grid, event) {
       id: event.id,
       title: event.title,
       numSlots: event.numSlots,
-      dates: grid.dates,
+      kind: grid.kind,
+      cols: grid.cols,
       times: grid.times,
       slotMinutes: grid.slotMinutes,
     }),
