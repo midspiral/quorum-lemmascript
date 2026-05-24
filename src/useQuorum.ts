@@ -5,7 +5,7 @@
 // already shows the per-slot count.)
 
 import { useSyncExternalStore, useMemo } from "react"
-import { heatmap, isBest, maxCount, type Event } from "./domain"
+import { heatmap, isBest, maxCount, whoIsFree, type Event, type Participant } from "./domain"
 import { opJoin, opSetAvail, makeParticipant, type Store } from "./store"
 import type { Grid } from "./gridShell"
 
@@ -20,6 +20,10 @@ export interface QuorumView {
   heatmap: number[]
   best: boolean[]
   peak: number
+  // Verified query: the participants free at slot `s`. Its length provably
+  // equals heatmap[s] (whoIsFree_ensures), so the tooltip can't disagree with
+  // the count on the cell.
+  whoAt: (slot: number) => Participant[]
   actions: QuorumActions
 }
 
@@ -52,5 +56,5 @@ export function useQuorum(store: Store): QuorumView {
     [store, grid.numSlots],
   )
 
-  return { grid, event, heatmap: hm, best, peak, actions }
+  return { grid, event, heatmap: hm, best, peak, whoAt: (slot) => whoIsFree(event, slot), actions }
 }

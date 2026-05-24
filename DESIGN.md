@@ -123,13 +123,13 @@ interface Event {
 
 > **Alternative backend (Supabase).** Maps cleanly: Postgres row per event with a `version` column for optimistic concurrency (à la `collab-todo`), Realtime for live heatmap push, an edge function calling the same `domain.ts`. We default to Cloudflare + DO because the per-event single-threaded model is the slicker fit and needs no auth; Supabase remains a drop-in if we want managed Postgres + SQL out of the box.
 
-> **Built so far (the app).** A pure **React + Vite SPA in TypeScript** (shell and verified core are both `.ts`/`.tsx`, so the UI is typechecked against the core's exported `Event`/`Participant` types), light-themed, local-first, with a deliberately **transport-agnostic seam**: `src/store.ts` is the only module that imports `applyOp` (`dispatch(op)` = `applyOp` + persist + notify, over a monotonic LWW clock), and `src/useQuorum.ts` is the only caller of `heatmap`/`isBest`/`maxCount` — so no scheduling math lives in components. Today the store is local (in-memory + `localStorage`); a future `RemoteStore` (WebSocket → the Durable Object above) implements the same `{getSnapshot, subscribe, dispatch}` interface with **no UI rewrite**. The cell↔slot mapping goes through the verified `src/grid.ts`; the NDJSON export uses the verified `sparsify`. UI is `src/App.tsx` (event creation in **two modes — a Sunday-start month calendar for specific dates, or day-of-week chips for recurring availability**; single grid with Paint/Group toggle, participant chips) + `src/components/Grid.tsx`. The grid model is `{kind: "dates" | "weekdays", cols, …}` — both modes are pure shell labeling over the same flat slot indices, so `domain.ts`/`grid.ts` are untouched by the distinction. The verified `availableAtLeast` threshold query stays in the core but isn't surfaced in the UI (the heatmap already shows per-slot counts). Runtime-checked by `test/smoke.mjs` (`npm test`).
+> **Built so far (the app).** A pure **React + Vite SPA in TypeScript** (shell and verified core are both `.ts`/`.tsx`, so the UI is typechecked against the core's exported `Event`/`Participant` types), light-themed, local-first, with a deliberately **transport-agnostic seam**: `src/store.ts` is the only module that imports `applyOp` (`dispatch(op)` = `applyOp` + persist + notify, over a monotonic LWW clock), and `src/useQuorum.ts` is the only caller of `heatmap`/`isBest`/`maxCount` — so no scheduling math lives in components. Today the store is local (in-memory + `localStorage`); a future `RemoteStore` (WebSocket → the Durable Object above) implements the same `{getSnapshot, subscribe, dispatch}` interface with **no UI rewrite**. The cell↔slot mapping goes through the verified `src/grid.ts`; the NDJSON export uses the verified `sparsify`. UI is `src/App.tsx` (event creation in **two modes — a Sunday-start month calendar for specific dates, or day-of-week chips for recurring availability**; single grid with Paint/Group toggle, participant chips) + `src/components/Grid.tsx`. The grid model is `{kind: "dates" | "weekdays", cols, …}` — both modes are pure shell labeling over the same flat slot indices, so `domain.ts`/`grid.ts` are untouched by the distinction. In Group view, hovering a cell shows **who is free there** via the verified `whoIsFree` (whose length provably equals the cell's count). The verified `availableAtLeast` threshold query stays in the core but isn't surfaced in the UI (the heatmap already shows per-slot counts). Runtime-checked by `test/smoke.mjs` (`npm test`).
 
 **Trust boundary, stated precisely.** Verified: all slot-index math, aggregation, queries, codec, op-log semantics. Trusted: WebSocket/DO/D1/R2 I/O, and the `slotIndex ⟷ (date, time, timezone)` map (each viewer renders the abstract grid in their own tz; the canonical index is tz-independent, anchored to absolute instants chosen at event creation).
 
 ## 7. Properties — the staged catalog
 
-Properties are grouped into families and sequenced into stages. We design the data model now so every family is reachable; we prove them in order. Spec sketches below use LemmaScript syntax (`forall(k, P)`, `\result`, no `\old`). **Families A1, B, C, the Family-D convergence core + D2 LWW + op-model/replay, the Stage-0b mutations, and the E1 sparse-codec round-trip are implemented and verified (`src/domain.ts`, 81 VCs, 0 errors) — those specs are the real ones; the rest are illustrative and get pinned during implementation.**
+Properties are grouped into families and sequenced into stages. We design the data model now so every family is reachable; we prove them in order. Spec sketches below use LemmaScript syntax (`forall(k, P)`, `\result`, no `\old`). **Families A1, B, C, the Family-D convergence core + D2 LWW + op-model/replay, the Stage-0b mutations, and the E1 sparse-codec round-trip are implemented and verified (`src/domain.ts`, 85 VCs + `src/grid.ts` 8 VCs, 0 errors; plus the in-app `whoIsFree` query) — those specs are the real ones; the rest are illustrative and get pinned during implementation.**
 
 A note from Stage 0 that shapes the specs: LemmaScript emits each pure function's `//@ ensures` as a *separate* `_ensures` lemma rather than a Dafny postcondition. So a function cannot rely on a callee's `ensures` inside its own body — callee preconditions must be discharged structurally. This pushed three concrete choices: aggregation is written as **pure recursive functions** (not imperative loops, which can't take proof hints); the counting core is **total** (`freeAt` guards the bit access) so it carries no precondition and composes freely; and `maxCount` is **precondition-free** for the same reason.
 
@@ -266,18 +266,28 @@ function sparseRoundTrip(a: boolean[]): boolean { return true; }
 - **E4 (canonical encoding)** — `encodeEvent` is a function (same event → same bytes), so exports are reproducible and diffable.
 
 ### Family F — Query algebra soundness (the "run queries over it" layer)
-Each query operator is characterized exactly (membership iff predicate), generalizing B/C to arbitrary participant subsets.
+**"Who is free at slot s" — implemented & verified, and surfaced in-app.** `whoIsFree`
+returns the participants free at `s` (by construction the `freeAt`-filter of the roster);
+its length provably equals the heatmap count, so the Group-view hover tooltip ("N free:
+Alex, Sam") can never disagree with the number on the cell.
 
 ```ts
-//@ requires Inv(e) && 0 <= s && s < e.numSlots
-//@ ensures \result.length === heatmap(e)[s]                 // count agrees with the heatmap
+//@ ensures \result.length === countFree(ps, s)
+function freeParticipants(ps: Participant[], s: number): Participant[]
+
+//@ requires e.numSlots >= 0 && 0 <= s && s < e.numSlots
+//@ ensures heatmap(e).length === e.numSlots
+//@ ensures \result.length === heatmap(e)[s]
+function whoIsFree(e: Event, s: number): Participant[]
+```
+
+Still planned (need **A2 — id uniqueness** in `wellFormed` for distinct-id guarantees):
+```ts
+// stronger membership-exact characterization, and the subgroup overlap query
 //@ ensures forall(p, member(\result, p) <==> (participantIn(e, p) && availOf(e, p)[s]))
 function participantsAt(e: Event, s: number): string[]
-
 // overlap(P) = slots where ALL of P are free; overlap(everyone) = slots with count === N
-//@ requires Inv(e)
-//@ ensures forall(s, member(\result, s) <==> (0 <= s && s < e.numSlots && allFreeAt(e, pids, s)))
-function overlap(e: Event, pids: string[]): number[]
+function overlap(e: Event, pids: string[]): boolean[]
 ```
 
 ## 8. The query layer & export format

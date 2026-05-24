@@ -1,6 +1,6 @@
 // Runtime smoke test: exercise the exact op-flow the app uses against the
 // verified core, and assert the aggregation outputs.
-import { initEvent, applyOp, heatmap, isBest, availableAtLeast, maxCount, sparsify, densify } from "../src/domain.ts"
+import { initEvent, applyOp, heatmap, isBest, availableAtLeast, maxCount, sparsify, densify, whoIsFree } from "../src/domain.ts"
 import { gridIndex } from "../src/grid.ts"
 
 const eq = (a, b, msg) => {
@@ -28,6 +28,11 @@ eq(availableAtLeast(e, 1), [false, true, true, false, true, false], "availableAt
 eq(sparsify(e.participants[0].avail), [1, 4], "sparsify A row (export codec)")
 eq(densify(sparsify(e.participants[0].avail), N), e.participants[0].avail, "densify∘sparsify = id")
 eq(gridIndex(3, 1, 1), 4, "gridIndex(slotsPerDay=3, day=1, time=1)")
+
+// whoIsFree(e, s): the participants free at s; length === heatmap[s]
+eq(whoIsFree(e, 1).map((p) => p.id).sort(), ["a", "b", "c"], "whoIsFree(1) = all three")
+eq(whoIsFree(e, 1).length, heatmap(e)[1], "whoIsFree length === heatmap count")
+eq(whoIsFree(e, 4).map((p) => p.id), ["a"], "whoIsFree(4) = just A")
 
 // LWW: a newer setAvail to the same participant wins; order-independence
 const e1 = applyOp(e, { kind: "setAvail", pid: "a", avail: Array(N).fill(false), at: 9 })

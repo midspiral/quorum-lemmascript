@@ -334,6 +334,33 @@ button.ghost:disabled {
   line-height: 1;
   color: var(--accent-ink);
 }
+/* who's-free tooltip (verified whoAt) */
+.cell-tip {
+  position: fixed;
+  z-index: 50;
+  max-width: 240px;
+  background: var(--ink);
+  color: #fff;
+  padding: 7px 11px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 6px 20px rgba(20, 20, 40, 0.22);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cell-tip strong {
+  color: #c7d2fe;
+}
+.cell-tip .names {
+  opacity: 0.92;
+}
+.cell-tip .muted {
+  color: #b9bcc6;
+}
+
 /* summary */
 .summary {
   margin-top: 22px;

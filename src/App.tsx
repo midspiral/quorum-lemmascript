@@ -267,7 +267,7 @@ function EventView({ id }: { id: string }) {
 }
 
 function EventBody({ store, id }: { store: Store; id: string }) {
-  const { grid, event, heatmap, best, peak, actions } = useQuorum(store)
+  const { grid, event, heatmap, best, peak, whoAt, actions } = useQuorum(store)
   const meKey = `quorum:me:${id}`
   const [me, setMe] = useState<string | null>(() => localStorage.getItem(meKey))
   const [active, setActive] = useState<string | null>(me)
@@ -361,6 +361,7 @@ function EventBody({ store, id }: { store: Store; id: string }) {
         heatmap={heatmap}
         best={best}
         peak={peak}
+        whoAt={whoAt}
         onSetCell={(slot, value) => active && actions.setCell(active, slot, value)}
       />
 

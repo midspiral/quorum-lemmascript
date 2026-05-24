@@ -739,3 +739,41 @@ lemma replayPreservesInv_ensures(e: Event, ops: seq<Op>)
     replayPreservesInv_ensures(applyOp(e, ops[0]), ops[1..]);
   }
 }
+
+function freeParticipants(ps: seq<Participant>, s: int): seq<Participant>
+  decreases |ps|
+{
+  if (|ps| == 0) then
+    []
+  else
+    var rest := freeParticipants(ps[1..], s);
+    if freeAt(ps[0], s) then
+      ([ps[0]] + rest)
+    else
+      rest
+}
+
+lemma freeParticipants_ensures(ps: seq<Participant>, s: int)
+  ensures (|freeParticipants(ps, s)| == countFree(ps, s))
+{
+}
+
+function whoIsFree(e: Event, s: int): seq<Participant>
+  requires (e.numSlots >= 0)
+  requires (0 <= s)
+  requires (s < e.numSlots)
+{
+  freeParticipants(e.participants, s)
+}
+
+lemma whoIsFree_ensures(e: Event, s: int)
+  requires (e.numSlots >= 0)
+  requires (0 <= s)
+  requires (s < e.numSlots)
+  ensures (|heatmap(e)| == e.numSlots)
+  ensures (|whoIsFree(e, s)| == heatmap(e)[s])
+{
+  // --- proof: |freeParticipants(ps,s)| == countFree(ps,s) == heatmap(e)[s] ---
+  heatmap_ensures(e);
+  freeParticipants_ensures(e.participants, s);
+}

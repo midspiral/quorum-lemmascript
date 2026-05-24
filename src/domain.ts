@@ -517,3 +517,27 @@ export function replayPreservesInv(e: Event, ops: Op[]): boolean {
   //@ ensures replay(e, ops).numSlots === e.numSlots
   return true
 }
+
+// ── Who is free? (in-app verified query) ──────────────────────
+//
+// The participants free at slot `s` — by construction the freeAt-filter of the
+// roster. Its length provably equals the heatmap count, so the "who's free here"
+// tooltip can never disagree with the number shown on the cell.
+
+export function freeParticipants(ps: Participant[], s: number): Participant[] {
+  //@ verify
+  //@ decreases ps.length
+  //@ ensures \result.length === countFree(ps, s)
+  if (ps.length === 0) return []
+  const rest = freeParticipants(ps.slice(1), s)
+  return freeAt(ps[0], s) ? [ps[0], ...rest] : rest
+}
+
+export function whoIsFree(e: Event, s: number): Participant[] {
+  //@ verify
+  //@ requires e.numSlots >= 0
+  //@ requires 0 <= s && s < e.numSlots
+  //@ ensures heatmap(e).length === e.numSlots
+  //@ ensures \result.length === heatmap(e)[s]
+  return freeParticipants(e.participants, s)
+}
