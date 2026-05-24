@@ -13,7 +13,7 @@ function allAvailLen(ps: seq<Participant>, n: int): bool
 lemma allAvailLen_ensures(ps: seq<Participant>, n: int)
   ensures ((allAvailLen(ps, n) == true) ==> forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (|ps[i].avail| == n)))
 {
-  // --- proof addition: induction on the participant list (ps[1..][i] == ps[i+1]) ---
+  // --- proof: induction on the participant list (ps[1..][i] == ps[i+1]) ---
   if (|ps| != 0) {
     allAvailLen_ensures(ps[1..], n);
   }
@@ -24,70 +24,71 @@ function wellFormed(e: Event): bool
   ((e.numSlots >= 0) && allAvailLen(e.participants, e.numSlots))
 }
 
+function freeAt(p: Participant, s: int): bool
+{
+  if (s < 0) then
+    false
+  else
+    if (s >= |p.avail|) then
+      false
+    else
+      p.avail[s]
+}
+
 function countFree(ps: seq<Participant>, s: int): int
-  requires (s >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (s < |ps[i].avail|))
   decreases |ps|
 {
   if (|ps| == 0) then
     0
   else
     var rest := countFree(ps[1..], s);
-    ((if ps[0].avail[s] then 1 else 0) + rest)
+    ((if freeAt(ps[0], s) then 1 else 0) + rest)
 }
 
 lemma countFree_ensures(ps: seq<Participant>, s: int)
-  requires (s >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (s < |ps[i].avail|))
   ensures (0 <= countFree(ps, s))
   ensures (countFree(ps, s) <= |ps|)
 {
 }
 
-function heatmapUpto(ps: seq<Participant>, n: int, k: int): seq<int>
+function heatmapUpto(ps: seq<Participant>, k: int): seq<int>
   requires (0 <= k)
-  requires (k <= n)
-  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (|ps[i].avail| == n))
   decreases k
 {
   if (k == 0) then
     []
   else
-    var prev := heatmapUpto(ps, n, (k - 1));
+    var prev := heatmapUpto(ps, (k - 1));
     (prev + [countFree(ps, (k - 1))])
 }
 
-lemma heatmapUpto_ensures(ps: seq<Participant>, n: int, k: int)
+lemma heatmapUpto_ensures(ps: seq<Participant>, k: int)
   requires (0 <= k)
-  requires (k <= n)
-  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (|ps[i].avail| == n))
-  ensures (|heatmapUpto(ps, n, k)| == k)
-  ensures forall s: int :: ((0 <= s) ==> (s < k) ==> (heatmapUpto(ps, n, k)[s] == countFree(ps, s)))
-  ensures forall s: int :: ((0 <= s) ==> (s < k) ==> ((0 <= heatmapUpto(ps, n, k)[s]) && (heatmapUpto(ps, n, k)[s] <= |ps|)))
+  ensures (|heatmapUpto(ps, k)| == k)
+  ensures forall s: int :: ((0 <= s) ==> (s < k) ==> (heatmapUpto(ps, k)[s] == countFree(ps, s)))
+  ensures forall s: int :: ((0 <= s) ==> (s < k) ==> ((0 <= heatmapUpto(ps, k)[s]) && (heatmapUpto(ps, k)[s] <= |ps|)))
 {
-  // --- proof addition: induction on k; tail from IH, last entry bounded by countFree_ensures ---
+  // --- proof: induction on k; tail from IH, last entry bounded by countFree_ensures ---
   if (k != 0) {
-    heatmapUpto_ensures(ps, n, k - 1);
+    heatmapUpto_ensures(ps, k - 1);
     countFree_ensures(ps, k - 1);
   }
 }
 
 function heatmap(e: Event): seq<int>
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
 {
-  heatmapUpto(e.participants, e.numSlots, e.numSlots)
+  heatmapUpto(e.participants, e.numSlots)
 }
 
 lemma heatmap_ensures(e: Event)
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
   ensures (|heatmap(e)| == e.numSlots)
   ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> (heatmap(e)[s] == countFree(e.participants, s)))
   ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> ((0 <= heatmap(e)[s]) && (heatmap(e)[s] <= |e.participants|)))
 {
-  // --- proof addition: heatmap(e) == heatmapUpto(participants, numSlots, numSlots) ---
-  heatmapUpto_ensures(e.participants, e.numSlots, e.numSlots);
+  // --- proof: heatmap(e) == heatmapUpto(participants, numSlots) ---
+  heatmapUpto_ensures(e.participants, e.numSlots);
 }
 
 function maxCount(h: seq<int>): int
@@ -110,8 +111,8 @@ lemma maxCount_ensures(h: seq<int>)
   ensures forall s: int :: ((0 <= s) ==> (s < |h|) ==> (h[s] <= maxCount(h)))
   ensures ((|h| > 0) ==> exists s: int :: (((0 <= s) && (s < |h|)) && (h[s] == maxCount(h))))
 {
-  // --- proof addition: induction on |h|; max of a non-empty list is attained,
-  // at index 0 when the head wins, else the tail's witness shifted by one. ---
+  // --- proof: induction on |h|; max of a non-empty list is attained, at index 0
+  // when the head wins, else the tail's witness shifted by one. ---
   if (|h| == 1) {
     assert h[0] == maxCount(h);
   } else if (|h| > 1) {
@@ -144,7 +145,6 @@ lemma isBestList_ensures(h: seq<int>, best: int)
 
 function isBest(e: Event): seq<bool>
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
 {
   var h := heatmap(e);
   var best := maxCount(h);
@@ -153,12 +153,11 @@ function isBest(e: Event): seq<bool>
 
 lemma isBest_ensures(e: Event)
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
   ensures (|heatmap(e)| == e.numSlots)
   ensures (|isBest(e)| == e.numSlots)
   ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> (isBest(e)[s] == ((heatmap(e)[s] == maxCount(heatmap(e))) && (maxCount(heatmap(e)) > 0))))
 {
-  // --- proof addition: |heatmap(e)| == numSlots, then the pointwise mask law ---
+  // --- proof: |heatmap(e)| == numSlots, then the pointwise mask law ---
   heatmap_ensures(e);
   isBestList_ensures(heatmap(e), maxCount(heatmap(e)));
 }
@@ -181,19 +180,78 @@ lemma atLeastList_ensures(h: seq<int>, k: int)
 
 function availableAtLeast(e: Event, k: int): seq<bool>
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
 {
   atLeastList(heatmap(e), k)
 }
 
 lemma availableAtLeast_ensures(e: Event, k: int)
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
   ensures (|heatmap(e)| == e.numSlots)
   ensures (|availableAtLeast(e, k)| == e.numSlots)
   ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> (availableAtLeast(e, k)[s] == (heatmap(e)[s] >= k)))
 {
-  // --- proof addition: |heatmap(e)| == numSlots, then the pointwise threshold law ---
+  // --- proof: |heatmap(e)| == numSlots, then the pointwise threshold law ---
   heatmap_ensures(e);
   atLeastList_ensures(heatmap(e), k);
+}
+
+function countFreeConcat(xs: seq<Participant>, ys: seq<Participant>, s: int): bool
+{
+  true
+}
+
+lemma countFreeConcat_ensures(xs: seq<Participant>, ys: seq<Participant>, s: int)
+  ensures (countFree((xs + ys), s) == (countFree(xs, s) + countFree(ys, s)))
+{
+  // --- proof: induction on xs. For |xs|>0, (xs+ys)[0]==xs[0] and
+  // (xs+ys)[1..]==xs[1..]+ys, so countFree distributes over the head. ---
+  if (|xs| != 0) {
+    assert (xs + ys)[1..] == xs[1..] + ys;
+    countFreeConcat_ensures(xs[1..], ys, s);
+  } else {
+    assert (xs + ys) == ys;
+  }
+}
+
+function countFreeComm(xs: seq<Participant>, ys: seq<Participant>, s: int): bool
+{
+  true
+}
+
+lemma countFreeComm_ensures(xs: seq<Participant>, ys: seq<Participant>, s: int)
+  ensures (countFree((xs + ys), s) == countFree((ys + xs), s))
+{
+  // --- proof: both sides equal countFree(xs,s)+countFree(ys,s) by the
+  // homomorphism, and integer addition commutes. ---
+  countFreeConcat_ensures(xs, ys, s);
+  countFreeConcat_ensures(ys, xs, s);
+}
+
+function heatmapBatchOrderInvariant(a: Event, b: Event, xs: seq<Participant>, ys: seq<Participant>): bool
+  requires (a.numSlots >= 0)
+  requires (a.numSlots == b.numSlots)
+  requires (a.participants == (xs + ys))
+  requires (b.participants == (ys + xs))
+{
+  true
+}
+
+lemma heatmapBatchOrderInvariant_ensures(a: Event, b: Event, xs: seq<Participant>, ys: seq<Participant>)
+  requires (a.numSlots >= 0)
+  requires (a.numSlots == b.numSlots)
+  requires (a.participants == (xs + ys))
+  requires (b.participants == (ys + xs))
+  ensures (|heatmap(a)| == a.numSlots)
+  ensures (|heatmap(b)| == b.numSlots)
+  ensures forall s: int :: ((0 <= s) ==> (s < a.numSlots) ==> (heatmap(a)[s] == heatmap(b)[s]))
+{
+  // --- proof: each heatmap cell is countFree of the (equal-up-to-order)
+  // participant list, and countFree is batch-commutative (countFreeComm). ---
+  heatmap_ensures(a);
+  heatmap_ensures(b);
+  forall s | 0 <= s < a.numSlots
+    ensures heatmap(a)[s] == heatmap(b)[s]
+  {
+    countFreeComm_ensures(xs, ys, s);
+  }
 }

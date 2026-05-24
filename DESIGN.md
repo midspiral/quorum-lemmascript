@@ -77,7 +77,7 @@ interface Event {
 
 (In-range and per-participant dedup are subsumed by A1 — that's the payoff of the bitset.)
 
-> **Implemented (Stage 0):** `wellFormed(e)` = A3 ∧ `allAvailLen(participants, numSlots)`, where `allAvailLen` is a recursive predicate carrying a reflection lemma that hands a caller the quantified A1 fact. A1 is what aggregation needs and is fully wired in. **A2 (id uniqueness) is not yet in `wellFormed`** — it isn't required by the heatmap (counting is per-row and order-free), only by the query layer (Family F, e.g. `participantsAt` returning distinct ids), so it lands with that stage.
+> **Implemented (Stage 0):** `wellFormed(e)` = A3 ∧ `allAvailLen(participants, numSlots)`, where `allAvailLen` is a recursive predicate carrying a reflection lemma that hands a caller the quantified A1 fact. **Aggregation no longer depends on `Inv` at all:** `countFree` is built on a *total* `freeAt` (out-of-range slots count as not-free), so `heatmap`/`isBest`/`availableAtLeast` only require `numSlots >= 0`. `wellFormed` remains the intended event shape that the mutations (Stage 0b) preserve; on a well-formed event A1 makes `freeAt(p, s) === p.avail[s]` for every in-range slot. **A2 (id uniqueness) is not yet in `wellFormed`** — not needed by the heatmap (counting is per-row, order-free), only by the query layer (Family F, e.g. `participantsAt` returning distinct ids), so it lands there.
 
 ## 6. Architecture
 
@@ -127,9 +127,9 @@ interface Event {
 
 ## 7. Properties — the staged catalog
 
-Properties are grouped into families and sequenced into stages. We design the data model now so every family is reachable; we prove them in order. Spec sketches below use LemmaScript syntax (`forall(k, P)`, `\result`, no `\old`). **Families A and B are implemented and verified (27 VCs, 0 errors) — those specs are the real ones from `src/domain.ts`; the rest are illustrative and get pinned during implementation.**
+Properties are grouped into families and sequenced into stages. We design the data model now so every family is reachable; we prove them in order. Spec sketches below use LemmaScript syntax (`forall(k, P)`, `\result`, no `\old`). **Families A1, B, the C4 threshold, and the Family-D convergence core are implemented and verified (`src/domain.ts`, 31 VCs, 0 errors) — those specs are the real ones; the rest are illustrative and get pinned during implementation.**
 
-A note from Stage 0 that shapes the specs: LemmaScript emits each pure function's `//@ ensures` as a *separate* `_ensures` lemma rather than a Dafny postcondition. So a function cannot rely on a callee's `ensures` inside its own body — callee preconditions must be discharged structurally. This pushed two concrete choices: aggregation is written as **pure recursive functions** (not imperative loops, which can't take proof hints), and `maxCount` is **precondition-free** so it composes inside other pure bodies.
+A note from Stage 0 that shapes the specs: LemmaScript emits each pure function's `//@ ensures` as a *separate* `_ensures` lemma rather than a Dafny postcondition. So a function cannot rely on a callee's `ensures` inside its own body — callee preconditions must be discharged structurally. This pushed three concrete choices: aggregation is written as **pure recursive functions** (not imperative loops, which can't take proof hints); the counting core is **total** (`freeAt` guards the bit access) so it carries no precondition and composes freely; and `maxCount` is **precondition-free** for the same reason.
 
 ### Family A — Well-formedness (the invariant)
 `Inv(e)` as in §5. Every mutation preserves it:
@@ -145,11 +145,10 @@ function setAvailability(e: Event, pid: string, newAvail: boolean[]): Event
 ```
 
 ### Family B — Aggregation correctness (heatmap + best) — **implemented & verified**
-The core promise. `countFree(ps, s)` is the spec-level recursive count; the well-formedness precondition is the quantified A1 fact (handed over by `allAvailLen`'s reflection lemma).
+The core promise. `countFree(ps, s)` is the spec-level recursive count, built on a **total** `freeAt(p, s)` (out-of-range slots are not free), so it needs no well-formedness precondition — which is what lets it compose freely (Family D) and keeps these specs clean.
 
 ```ts
 //@ requires e.numSlots >= 0
-//@ requires forall(i, 0 <= i && i < e.participants.length ==> e.participants[i].avail.length === e.numSlots)
 //@ ensures \result.length === e.numSlots
 //@ ensures forall(s, 0 <= s && s < e.numSlots ==> \result[s] === countFree(e.participants, s))
 //@ ensures forall(s, 0 <= s && s < e.numSlots ==> 0 <= \result[s] && \result[s] <= e.participants.length)
@@ -167,7 +166,6 @@ function maxCount(h: number[]): number
 // property B5 — no recommendation when nobody has entered anything). The mask sidesteps
 // set-membership reasoning and is exactly what the grid UI highlights.
 //@ requires e.numSlots >= 0
-//@ requires forall(i, 0 <= i && i < e.participants.length ==> e.participants[i].avail.length === e.numSlots)
 //@ ensures heatmap(e).length === e.numSlots
 //@ ensures \result.length === e.numSlots
 //@ ensures forall(s, 0 <= s && s < e.numSlots ==>
@@ -195,39 +193,38 @@ function unanimousIsBest(e: Event, s: number): boolean { return true; }
 Threshold query — **implemented & verified** (also a boolean mask, matching `isBest`):
 ```ts
 //@ requires e.numSlots >= 0
-//@ requires forall(i, 0 <= i && i < e.participants.length ==> e.participants[i].avail.length === e.numSlots)
 //@ ensures heatmap(e).length === e.numSlots
 //@ ensures \result.length === e.numSlots
 //@ ensures forall(s, 0 <= s && s < e.numSlots ==> \result[s] === (heatmap(e)[s] >= k))
 function availableAtLeast(e: Event, k: number): boolean[]
 ```
 
-### Family D — Convergence / order-independence (the headline)
-Because participants own disjoint rows, operations on **distinct** participants commute exactly, and replaying an op log in any order yields the same heatmap (with LWW tie-break on same-participant ops). Op model + replay:
+### Family D — Convergence / order-independence (the headline) — **core implemented & verified**
+Because the heatmap is a fold over per-participant rows, and `countFree` is **total**, the per-slot count is a *homomorphism from participant-list concatenation to integer addition*. That gives the algebraic backbone of "order doesn't matter," and it's proved:
 
 ```ts
-type Op =
-  | { kind: "join"; p: Participant }
-  | { kind: "setAvail"; pid: string; avail: boolean[]; at: number };
+// Homomorphism: counting two batches and adding === counting the joined list.
+//@ ensures countFree(xs.concat(ys), s) === countFree(xs, s) + countFree(ys, s)
+function countFreeConcat(xs: Participant[], ys: Participant[], s: number): boolean { return true; }
 
-//@ requires Inv(e)
-//@ ensures Inv(\result)
-function applyOp(e: Event, op: Op): Event
+// Batch commutativity (corollary of the homomorphism + commutativity of +).
+//@ ensures countFree(xs.concat(ys), s) === countFree(ys.concat(xs), s)
+function countFreeComm(xs: Participant[], ys: Participant[], s: number): boolean { return true; }
 
-//@ requires Inv(e0)
-//@ ensures Inv(\result)
-function replay(e0: Event, ops: Op[]): Event
+// Lifted to the observable: two events differing only by the order of two
+// participant batches have identical heatmaps — so concurrent batches of
+// responses, applied in any order, agree on the heatmap (and on isBest / availableAtLeast).
+//@ requires a.numSlots >= 0 && a.numSlots === b.numSlots
+//@ requires a.participants === xs.concat(ys) && b.participants === ys.concat(xs)
+//@ ensures forall(s, 0 <= s && s < a.numSlots ==> heatmap(a)[s] === heatmap(b)[s])
+function heatmapBatchOrderInvariant(a: Event, b: Event, xs: Participant[], ys: Participant[]): boolean { return true; }
 ```
 
-- **D3 (distinct-participant commutativity)** — concrete two-op lemma, easy:
-  ```ts
-  //@ requires Inv(e) && touchesDistinct(op1, op2)
-  //@ ensures forall(s, 0 <= s && s < e.numSlots ==>
-  //@           heatmap(applyOp(applyOp(e, op1), op2))[s] === heatmap(applyOp(applyOp(e, op2), op1))[s])
-  function opsCommute(e: Event, op1: Op, op2: Op): boolean { return true; }
-  ```
-- **D2 (same-participant LWW convergence)** — concurrent edits to one participant resolve by `(updatedAt, id)`; `max`-by-timestamp is commutative/associative, so the final row is order-independent. (`reference-crdts` precedent.)
-- **D1 (permutation invariance of `replay`)** — the deep target: `heatmap(replay(e0, ops))` is elementwise equal to `heatmap(replay(e0, perm(ops)))` for any permutation. **Strategy:** the final per-participant row is the LWW-max over that participant's ops; the heatmap is a fold that reads only final rows; max is commutative/associative ⇒ permutation-invariant. This is the formal "why login-free merge is safe."
+This is the formal "why login-free merge is safe": the aggregate factors through the commutative monoid (ℤ, +), so batch order and grouping are irrelevant. Still planned:
+
+- **D1 (full element-level permutation invariance).** The natural statement — `multiset(xs) === multiset(ys) ==> countFree(xs, s) === countFree(ys, s)` — is **not expressible in `//@` specs today** (no `multiset` type, no raw-Dafny escape; see `LS_TODO.md`). The concat-homomorphism above is the expressible abelian-monoid core; full permutation-invariance is one lemma away once specs can name `multiset`.
+- **D2 (same-participant LWW convergence)** — once the op model lands, concurrent edits to one participant resolve by `(updatedAt, id)`; `max`-by-timestamp is commutative/associative, so the final row is order-independent (`reference-crdts` precedent).
+- **Op model / replay** (`applyOp`, `replay`) — the operational wrapper (join / setAvail with timestamps) over which D1/D2 are ultimately stated; deferred until the mutations (Stage 0b) land.
 
 ### Family E — Export faithfulness + query soundness
 ```ts
@@ -277,10 +274,11 @@ function overlap(e: Event, pids: string[]): number[]
 
 | Stage | Lands | Families | Status |
 |-------|-------|----------|--------|
-| **0 — spine** | Data model + A1 invariant, `heatmap`/`maxCount`/`isBest`/`availableAtLeast` (count-correctness, boundedness, best mask, threshold). | A1, B, C4 | ✅ **verified** (27 VCs, 0 errors) |
+| **0 — spine** | Total `countFree`/`freeAt`, `heatmap`/`maxCount`/`isBest`/`availableAtLeast` (count-correctness, boundedness, best mask, threshold). | A1, B, C4 | ✅ **verified** |
+| **2 — convergence (core)** | `countFreeConcat` homomorphism, `countFreeComm` batch commutativity, `heatmapBatchOrderInvariant` — order-independence of the heatmap under participant batches. | D (core) | ✅ **verified** |
 | **0b — mutations + codec** | `addParticipant`/`setAvailability`/`removeParticipant` preserve `Inv`; sparse codec `densify(sparsify) == id`. Makes the core exportable + mutable. | A, E1 | next |
 | **1 — monotonicity** | `heatmapMonotoneUnderJoin`, `unanimousIsBest`. Cheap given B. | C | |
-| **2 — convergence** | D3 (distinct-participant commute) → D1 (replay permutation-invariance) → D2 (same-participant LWW). The headline. | D | |
+| **2b — convergence (deep)** | op model + `replay`; D2 (same-participant LWW); D1 full permutation-invariance (needs `multiset` in specs — see `LS_TODO.md`). | D | |
 | **3 — query layer** | `participantsAt`, `overlap` (needs A2 id-uniqueness); query-over-export soundness E2; canonical encoding E4. | F, E2, E4 | |
 | **4 — richness (optional)** | Ternary availability (`Available \| IfNeedBe \| Unavailable`) → unlocks rallly-style score-formula pinning + tiebreaker injectivity on top of the grid. | (extends B/C) | |
 
@@ -290,7 +288,7 @@ Each stage is shippable; the aggregation core is trustworthy after Stage 0, with
 
 - **`//@ backend dafny`**, discharged via `lsc` on the real TypeScript (`src/domain.ts`); `LemmaScript-files.txt` manifest; CI regenerates `.dfy.gen` and runs `dafny verify`, asserting no drift — matching the workspace convention.
 - **The same `domain.ts` runs everywhere** — React (optimistic heatmap), the Durable Object (authoritative mutate), and the query endpoint (replay over corpus). No adapter, no second implementation, no desync.
-- **`ensures` are separate lemmas.** LemmaScript emits each pure function's `//@ ensures` as a standalone `_ensures` lemma, not a Dafny postcondition. Consequences confirmed in Stage 0: (1) write **pure recursive functions**, not imperative loops (`method`s can't take proof hints); (2) a function can't lean on a callee's `ensures` in its own body, so callee preconditions are discharged structurally (why `maxCount` is precondition-free); (3) lemmas that need induction get hand-written proofs in `domain.dfy` (e.g. `allAvailLen_ensures`, `heatmapUpto_ensures`, `maxCount_ensures`), which Dafny then re-checks. Many simple `_ensures` auto-discharge.
+- **`ensures` are separate lemmas.** LemmaScript emits each pure function's `//@ ensures` as a standalone `_ensures` lemma, not a Dafny postcondition. Consequences confirmed so far: (1) write **pure recursive functions**, not imperative loops (`method`s can't take proof hints); (2) a function can't lean on a callee's `ensures` in its own body, so callee preconditions are discharged structurally — this is why the counting core is **total** (`freeAt`/`countFree` carry no precondition) and `maxCount` is precondition-free, so they compose inside `heatmap`, `isBest`, and the convergence lemmas; (3) lemmas that need induction get hand-written proofs in `domain.dfy` (e.g. `allAvailLen_ensures`, `heatmapUpto_ensures`, `maxCount_ensures`, `countFreeConcat_ensures`), which Dafny then re-checks. Many simple `_ensures` auto-discharge.
 - **Induction without `\old`:** relational/monotonicity/convergence lemmas use the pure-carrier technique (TS body `return true`, induction in the generated `_ensures`).
 - **`regen` caveat.** `lsc regen` corrupts this file on any mid-file declaration change (duplicates trailing decls — see `LS_TODO.md`). Working loop: `lsc gen` → `cp domain.dfy.gen domain.dfy` → reapply the hand proofs → `lsc check`.
 - **Honest scope:** we state each `ensures` precisely and name the trusted edges inline (I/O, timezone labeling, DB-enforced append-only). No "verified end-to-end" claim, no "just a demo."

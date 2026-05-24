@@ -20,59 +20,60 @@ function wellFormed(e: Event): bool
   ((e.numSlots >= 0) && allAvailLen(e.participants, e.numSlots))
 }
 
+function freeAt(p: Participant, s: int): bool
+{
+  if (s < 0) then
+    false
+  else
+    if (s >= |p.avail|) then
+      false
+    else
+      p.avail[s]
+}
+
 function countFree(ps: seq<Participant>, s: int): int
-  requires (s >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (s < |ps[i].avail|))
   decreases |ps|
 {
   if (|ps| == 0) then
     0
   else
     var rest := countFree(ps[1..], s);
-    ((if ps[0].avail[s] then 1 else 0) + rest)
+    ((if freeAt(ps[0], s) then 1 else 0) + rest)
 }
 
 lemma countFree_ensures(ps: seq<Participant>, s: int)
-  requires (s >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (s < |ps[i].avail|))
   ensures (0 <= countFree(ps, s))
   ensures (countFree(ps, s) <= |ps|)
 {
 }
 
-function heatmapUpto(ps: seq<Participant>, n: int, k: int): seq<int>
+function heatmapUpto(ps: seq<Participant>, k: int): seq<int>
   requires (0 <= k)
-  requires (k <= n)
-  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (|ps[i].avail| == n))
   decreases k
 {
   if (k == 0) then
     []
   else
-    var prev := heatmapUpto(ps, n, (k - 1));
+    var prev := heatmapUpto(ps, (k - 1));
     (prev + [countFree(ps, (k - 1))])
 }
 
-lemma heatmapUpto_ensures(ps: seq<Participant>, n: int, k: int)
+lemma heatmapUpto_ensures(ps: seq<Participant>, k: int)
   requires (0 <= k)
-  requires (k <= n)
-  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (|ps[i].avail| == n))
-  ensures (|heatmapUpto(ps, n, k)| == k)
-  ensures forall s: int :: ((0 <= s) ==> (s < k) ==> (heatmapUpto(ps, n, k)[s] == countFree(ps, s)))
-  ensures forall s: int :: ((0 <= s) ==> (s < k) ==> ((0 <= heatmapUpto(ps, n, k)[s]) && (heatmapUpto(ps, n, k)[s] <= |ps|)))
+  ensures (|heatmapUpto(ps, k)| == k)
+  ensures forall s: int :: ((0 <= s) ==> (s < k) ==> (heatmapUpto(ps, k)[s] == countFree(ps, s)))
+  ensures forall s: int :: ((0 <= s) ==> (s < k) ==> ((0 <= heatmapUpto(ps, k)[s]) && (heatmapUpto(ps, k)[s] <= |ps|)))
 {
 }
 
 function heatmap(e: Event): seq<int>
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
 {
-  heatmapUpto(e.participants, e.numSlots, e.numSlots)
+  heatmapUpto(e.participants, e.numSlots)
 }
 
 lemma heatmap_ensures(e: Event)
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
   ensures (|heatmap(e)| == e.numSlots)
   ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> (heatmap(e)[s] == countFree(e.participants, s)))
   ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> ((0 <= heatmap(e)[s]) && (heatmap(e)[s] <= |e.participants|)))
@@ -119,7 +120,6 @@ lemma isBestList_ensures(h: seq<int>, best: int)
 
 function isBest(e: Event): seq<bool>
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
 {
   var h := heatmap(e);
   var best := maxCount(h);
@@ -128,7 +128,6 @@ function isBest(e: Event): seq<bool>
 
 lemma isBest_ensures(e: Event)
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
   ensures (|heatmap(e)| == e.numSlots)
   ensures (|isBest(e)| == e.numSlots)
   ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> (isBest(e)[s] == ((heatmap(e)[s] == maxCount(heatmap(e))) && (maxCount(heatmap(e)) > 0))))
@@ -153,16 +152,54 @@ lemma atLeastList_ensures(h: seq<int>, k: int)
 
 function availableAtLeast(e: Event, k: int): seq<bool>
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
 {
   atLeastList(heatmap(e), k)
 }
 
 lemma availableAtLeast_ensures(e: Event, k: int)
   requires (e.numSlots >= 0)
-  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (|e.participants[i].avail| == e.numSlots))
   ensures (|heatmap(e)| == e.numSlots)
   ensures (|availableAtLeast(e, k)| == e.numSlots)
   ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> (availableAtLeast(e, k)[s] == (heatmap(e)[s] >= k)))
+{
+}
+
+function countFreeConcat(xs: seq<Participant>, ys: seq<Participant>, s: int): bool
+{
+  true
+}
+
+lemma countFreeConcat_ensures(xs: seq<Participant>, ys: seq<Participant>, s: int)
+  ensures (countFree((xs + ys), s) == (countFree(xs, s) + countFree(ys, s)))
+{
+}
+
+function countFreeComm(xs: seq<Participant>, ys: seq<Participant>, s: int): bool
+{
+  true
+}
+
+lemma countFreeComm_ensures(xs: seq<Participant>, ys: seq<Participant>, s: int)
+  ensures (countFree((xs + ys), s) == countFree((ys + xs), s))
+{
+}
+
+function heatmapBatchOrderInvariant(a: Event, b: Event, xs: seq<Participant>, ys: seq<Participant>): bool
+  requires (a.numSlots >= 0)
+  requires (a.numSlots == b.numSlots)
+  requires (a.participants == (xs + ys))
+  requires (b.participants == (ys + xs))
+{
+  true
+}
+
+lemma heatmapBatchOrderInvariant_ensures(a: Event, b: Event, xs: seq<Participant>, ys: seq<Participant>)
+  requires (a.numSlots >= 0)
+  requires (a.numSlots == b.numSlots)
+  requires (a.participants == (xs + ys))
+  requires (b.participants == (ys + xs))
+  ensures (|heatmap(a)| == a.numSlots)
+  ensures (|heatmap(b)| == b.numSlots)
+  ensures forall s: int :: ((0 <= s) ==> (s < a.numSlots) ==> (heatmap(a)[s] == heatmap(b)[s]))
 {
 }
