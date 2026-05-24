@@ -41,11 +41,11 @@ lemma gridIndexInRange_ensures(numDays: int, slotsPerDay: int, day: int, time: i
   ensures (0 <= gridIndex(slotsPerDay, day, time))
   ensures (gridIndex(slotsPerDay, day, time) < (numDays * slotsPerDay))
 {
-  // --- proof: gridIndex < (day+1)*spd <= numDays*spd; the second step is
-  // monotonicity of (*spd), coaxed via a nonneg-product hint. ---
+  // --- proof: gridIndex < (day+1)*spd (gridIndex_ensures) <= numDays*spd. The
+  // second step is monotonicity of (* spd), via the inductive mulMonoLeft so Z3
+  // never searches nonlinearly (a bare assert is flaky across Z3 versions). ---
   gridIndex_ensures(slotsPerDay, day, time);
-  assert (numDays - day - 1) * slotsPerDay >= 0;
-  assert (day + 1) * slotsPerDay <= numDays * slotsPerDay;
+  mulMonoLeft(day + 1, numDays, slotsPerDay);
 }
 
 function gridIndexInjective(slotsPerDay: int, d1: int, t1: int, d2: int, t2: int): bool
@@ -72,6 +72,25 @@ lemma mulGeRight(a: int, b: int)
   if (a > 1) { mulGeRight(a - 1, b); }
 }
 
+// helper: monotonicity of (* c) for c >= 0, by induction on c.
+lemma mulMonoLeft(a: int, b: int, c: int)
+  requires a <= b
+  requires c >= 0
+  ensures a * c <= b * c
+  decreases c
+{
+  if (c > 0) { mulMonoLeft(a, b, c - 1); }
+}
+
+// helper: right-distributivity of (* c) over subtraction, by induction on c.
+lemma mulDistribSub(a: int, b: int, c: int)
+  requires c >= 0
+  ensures (a - b) * c == (a * c) - (b * c)
+  decreases c
+{
+  if (c > 0) { mulDistribSub(a, b, c - 1); }
+}
+
 lemma gridIndexInjective_ensures(slotsPerDay: int, d1: int, t1: int, d2: int, t2: int)
   requires (slotsPerDay >= 1)
   requires (d1 >= 0)
@@ -87,7 +106,11 @@ lemma gridIndexInjective_ensures(slotsPerDay: int, d1: int, t1: int, d2: int, t2
   // --- proof: the equation gives t1 - t2 == (d2-d1)*spd. If d1 != d2 that
   // product has magnitude >= spd, but |t1 - t2| < spd — contradiction. So d1 == d2,
   // and then the equation forces t1 == t2. ---
-  assert t1 - t2 == (d2 - d1) * slotsPerDay;
+  // From the equality (unfolded): d1*spd + t1 == d2*spd + t2. mulDistribSub ties
+  // (d2-d1)*spd to d2*spd - d1*spd without any nonlinear search; mulGeRight then
+  // bounds that product below by spd whenever d1 != d2 — impossible since |t1-t2| < spd.
+  mulDistribSub(d2, d1, slotsPerDay);
+  mulDistribSub(d1, d2, slotsPerDay);
   if (d1 < d2) {
     mulGeRight(d2 - d1, slotsPerDay);   // (d2-d1)*spd >= spd, but t1-t2 < spd
     assert false;
