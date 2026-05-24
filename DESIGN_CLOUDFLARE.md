@@ -62,6 +62,13 @@ append-only **op log** (which `replay` is verified to fold back) is a natural ad
 audit / late-joiner deltas / a D1 corpus, but is **deferred**; the materialized event
 suffices for the live app and per-event export.
 
+## Visibility
+**Unlisted, link-shared.** There is no server-side directory — the only handle to an event
+is its URL (`#e=<code>`), which addresses exactly one Durable Object. The "your events" list
+is per-device `localStorage`. Anyone with the link can view and participate. Codes are short
+and need not be unguessable — by the owner's call, a lucky guess landing on a real event is
+low-stakes (an unknown code just 404s). No private/invite-only mode (that would need login).
+
 ## Identity & trust (stated honestly)
 No login. Identity = an anonymous `pid` in `localStorage`, sent on `hello`. The server
 trusts the client's `pid` — a malicious client could paint as someone else. That's the
