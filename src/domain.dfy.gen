@@ -203,3 +203,136 @@ lemma heatmapBatchOrderInvariant_ensures(a: Event, b: Event, xs: seq<Participant
   ensures forall s: int :: ((0 <= s) ==> (s < a.numSlots) ==> (heatmap(a)[s] == heatmap(b)[s]))
 {
 }
+
+function initEvent(id: string, title: string, numSlots: int): Event
+  requires (numSlots >= 0)
+{
+  Event(id, title, numSlots, [])
+}
+
+lemma initEvent_ensures(id: string, title: string, numSlots: int)
+  requires (numSlots >= 0)
+  ensures wellFormed(initEvent(id, title, numSlots))
+  ensures (initEvent(id, title, numSlots).numSlots == numSlots)
+{
+}
+
+function allAvailLenSnoc(ps: seq<Participant>, p: Participant, n: int): bool
+  requires allAvailLen(ps, n)
+  requires (|p.avail| == n)
+  decreases |ps|
+{
+  true
+}
+
+lemma allAvailLenSnoc_ensures(ps: seq<Participant>, p: Participant, n: int)
+  requires allAvailLen(ps, n)
+  requires (|p.avail| == n)
+  ensures allAvailLen((ps + [p]), n)
+{
+}
+
+function addParticipant(e: Event, p: Participant): Event
+  requires wellFormed(e)
+  requires (|p.avail| == e.numSlots)
+{
+  e.(participants := (e.participants + [p]))
+}
+
+lemma addParticipant_ensures(e: Event, p: Participant)
+  requires wellFormed(e)
+  requires (|p.avail| == e.numSlots)
+  ensures wellFormed(addParticipant(e, p))
+  ensures (addParticipant(e, p).numSlots == e.numSlots)
+{
+}
+
+function setAvail(ps: seq<Participant>, pid: string, newAvail: seq<bool>): seq<Participant>
+  decreases |ps|
+{
+  if (|ps| == 0) then
+    []
+  else
+    if (ps[0].id == pid) then
+      ([ps[0].(avail := newAvail)] + ps[1..])
+    else
+      ([ps[0]] + setAvail(ps[1..], pid, newAvail))
+}
+
+lemma setAvail_ensures(ps: seq<Participant>, pid: string, newAvail: seq<bool>)
+  ensures (|setAvail(ps, pid, newAvail)| == |ps|)
+{
+}
+
+function setAvailPreservesLen(ps: seq<Participant>, pid: string, newAvail: seq<bool>, n: int): bool
+  requires allAvailLen(ps, n)
+  requires (|newAvail| == n)
+  decreases |ps|
+{
+  true
+}
+
+lemma setAvailPreservesLen_ensures(ps: seq<Participant>, pid: string, newAvail: seq<bool>, n: int)
+  requires allAvailLen(ps, n)
+  requires (|newAvail| == n)
+  ensures allAvailLen(setAvail(ps, pid, newAvail), n)
+{
+}
+
+function setAvailability(e: Event, pid: string, newAvail: seq<bool>): Event
+  requires wellFormed(e)
+  requires (|newAvail| == e.numSlots)
+{
+  e.(participants := setAvail(e.participants, pid, newAvail))
+}
+
+lemma setAvailability_ensures(e: Event, pid: string, newAvail: seq<bool>)
+  requires wellFormed(e)
+  requires (|newAvail| == e.numSlots)
+  ensures wellFormed(setAvailability(e, pid, newAvail))
+  ensures (setAvailability(e, pid, newAvail).numSlots == e.numSlots)
+{
+}
+
+function removeP(ps: seq<Participant>, pid: string): seq<Participant>
+  decreases |ps|
+{
+  if (|ps| == 0) then
+    []
+  else
+    if (ps[0].id == pid) then
+      removeP(ps[1..], pid)
+    else
+      ([ps[0]] + removeP(ps[1..], pid))
+}
+
+lemma removeP_ensures(ps: seq<Participant>, pid: string)
+  ensures (|removeP(ps, pid)| <= |ps|)
+{
+}
+
+function removePPreservesLen(ps: seq<Participant>, pid: string, n: int): bool
+  requires allAvailLen(ps, n)
+  decreases |ps|
+{
+  true
+}
+
+lemma removePPreservesLen_ensures(ps: seq<Participant>, pid: string, n: int)
+  requires allAvailLen(ps, n)
+  ensures allAvailLen(removeP(ps, pid), n)
+{
+}
+
+function removeParticipant(e: Event, pid: string): Event
+  requires wellFormed(e)
+{
+  e.(participants := removeP(e.participants, pid))
+}
+
+lemma removeParticipant_ensures(e: Event, pid: string)
+  requires wellFormed(e)
+  ensures wellFormed(removeParticipant(e, pid))
+  ensures (removeParticipant(e, pid).numSlots == e.numSlots)
+{
+}

@@ -211,3 +211,89 @@ export function heatmapBatchOrderInvariant(a: Event, b: Event, xs: Participant[]
   //@ ensures forall(s, 0 <= s && s < a.numSlots ==> heatmap(a)[s] === heatmap(b)[s])
   return true
 }
+
+// ── Mutations (Stage 0b): every transition preserves the A1 invariant ──
+
+// A fresh event has no participants, so the invariant holds vacuously.
+export function initEvent(id: string, title: string, numSlots: number): Event {
+  //@ verify
+  //@ requires numSlots >= 0
+  //@ ensures wellFormed(\result)
+  //@ ensures \result.numSlots === numSlots
+  return { id: id, title: title, numSlots: numSlots, participants: [] }
+}
+
+// Appending a grid-width-matching participant preserves allAvailLen (induction).
+export function allAvailLenSnoc(ps: Participant[], p: Participant, n: number): boolean {
+  //@ verify
+  //@ requires allAvailLen(ps, n)
+  //@ requires p.avail.length === n
+  //@ decreases ps.length
+  //@ ensures allAvailLen(ps.concat([p]), n)
+  return true
+}
+
+// A participant joins by appending their row.
+export function addParticipant(e: Event, p: Participant): Event {
+  //@ verify
+  //@ requires wellFormed(e)
+  //@ requires p.avail.length === e.numSlots
+  //@ ensures wellFormed(\result)
+  //@ ensures \result.numSlots === e.numSlots
+  return { ...e, participants: [...e.participants, p] }
+}
+
+// Replace the availability of the participant whose id === pid (others untouched).
+export function setAvail(ps: Participant[], pid: string, newAvail: boolean[]): Participant[] {
+  //@ verify
+  //@ decreases ps.length
+  //@ ensures \result.length === ps.length
+  if (ps.length === 0) return []
+  if (ps[0].id === pid) return [{ ...ps[0], avail: newAvail }, ...ps.slice(1)]
+  return [ps[0], ...setAvail(ps.slice(1), pid, newAvail)]
+}
+
+export function setAvailPreservesLen(ps: Participant[], pid: string, newAvail: boolean[], n: number): boolean {
+  //@ verify
+  //@ requires allAvailLen(ps, n)
+  //@ requires newAvail.length === n
+  //@ decreases ps.length
+  //@ ensures allAvailLen(setAvail(ps, pid, newAvail), n)
+  return true
+}
+
+// A participant repaints their row; grid width is unchanged, so Inv is preserved.
+export function setAvailability(e: Event, pid: string, newAvail: boolean[]): Event {
+  //@ verify
+  //@ requires wellFormed(e)
+  //@ requires newAvail.length === e.numSlots
+  //@ ensures wellFormed(\result)
+  //@ ensures \result.numSlots === e.numSlots
+  return { ...e, participants: setAvail(e.participants, pid, newAvail) }
+}
+
+// Remove every participant whose id === pid.
+export function removeP(ps: Participant[], pid: string): Participant[] {
+  //@ verify
+  //@ decreases ps.length
+  //@ ensures \result.length <= ps.length
+  if (ps.length === 0) return []
+  if (ps[0].id === pid) return removeP(ps.slice(1), pid)
+  return [ps[0], ...removeP(ps.slice(1), pid)]
+}
+
+export function removePPreservesLen(ps: Participant[], pid: string, n: number): boolean {
+  //@ verify
+  //@ requires allAvailLen(ps, n)
+  //@ decreases ps.length
+  //@ ensures allAvailLen(removeP(ps, pid), n)
+  return true
+}
+
+export function removeParticipant(e: Event, pid: string): Event {
+  //@ verify
+  //@ requires wellFormed(e)
+  //@ ensures wellFormed(\result)
+  //@ ensures \result.numSlots === e.numSlots
+  return { ...e, participants: removeP(e.participants, pid) }
+}

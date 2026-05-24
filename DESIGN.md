@@ -105,12 +105,12 @@ interface Event {
 
         ╔══════════════════════════════════════════════════════════════╗
         ║  VERIFIED pure core — src/domain.ts (//@ verify)             ║
-        ║  [Stage 0, proved] wellFormed/allAvailLen, countFree,        ║
-        ║    heatmapUpto/heatmap, maxCount, isBest, availableAtLeast   ║
-        ║  [planned] addParticipant, setAvailability, removeParticipant║
-        ║  participantsAt, overlap  (query algebra)                    ║
-        ║  sparsify/densify, encodeEvent/decodeEvent  (export codec)   ║
-        ║  applyOp, replay  (op-log semantics, for convergence)        ║
+        ║  [proved] wellFormed/allAvailLen, countFree, heatmap,        ║
+        ║    maxCount, isBest, availableAtLeast; countFree homomorphism ║
+        ║    (convergence core); init/add/setAvailability/removeP      ║
+        ║    (Inv-preserving mutations)                                ║
+        ║  [planned] sparsify/densify codec (E1); participantsAt,      ║
+        ║    overlap (queries); applyOp/replay (op-log, for D1/D2)     ║
         ╚══════════════════════════════════════════════════════════════╝
 ```
 
@@ -276,7 +276,8 @@ function overlap(e: Event, pids: string[]): number[]
 |-------|-------|----------|--------|
 | **0 — spine** | Total `countFree`/`freeAt`, `heatmap`/`maxCount`/`isBest`/`availableAtLeast` (count-correctness, boundedness, best mask, threshold). | A1, B, C4 | ✅ **verified** |
 | **2 — convergence (core)** | `countFreeConcat` homomorphism, `countFreeComm` batch commutativity, `heatmapBatchOrderInvariant` — order-independence of the heatmap under participant batches. | D (core) | ✅ **verified** |
-| **0b — mutations + codec** | `addParticipant`/`setAvailability`/`removeParticipant` preserve `Inv`; sparse codec `densify(sparsify) == id`. Makes the core exportable + mutable. | A, E1 | next |
+| **0b — mutations** | `initEvent`/`addParticipant`/`setAvailability`/`removeParticipant` preserve `Inv`. | A | ✅ **verified** |
+| **0b — codec** | sparse codec `densify(sparsify) == id`. Makes the core exportable. | E1 | next |
 | **1 — monotonicity** | `heatmapMonotoneUnderJoin`, `unanimousIsBest`. Cheap given B. | C | |
 | **2b — convergence (deep)** | op model + `replay`; D2 (same-participant LWW); D1 full permutation-invariance (needs `multiset` in specs — see `LS_TODO.md`). | D | |
 | **3 — query layer** | `participantsAt`, `overlap` (needs A2 id-uniqueness); query-over-export soundness E2; canonical encoding E4. | F, E2, E4 | |

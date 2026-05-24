@@ -13,5 +13,9 @@ dist
 .DS_Store
 *.log
 
+# regen merge-anchor scratch file (transient; see LemmaScript/AGENTS.md)
+*.dfy.base
+*.dfy.merged
+
 # NOTE: src/*.dfy and src/*.dfy.gen are intentionally tracked — CI regenerates
 # and diff-checks them (see LemmaScript-files.txt).
