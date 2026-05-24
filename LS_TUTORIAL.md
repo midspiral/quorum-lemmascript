@@ -38,7 +38,7 @@ export function summary(s: State): Answer {
 ```
 
 Verify this **before** writing a line of UI. The payoff is a contract you can build on: every
-number the app later renders traces back to a proven function.
+value the app later renders traces back to a proven function.
 
 Conventions that keep proofs smooth (LemmaScript turns each `//@ ensures` into a *separate*
 lemma, which a pure function can't call):
