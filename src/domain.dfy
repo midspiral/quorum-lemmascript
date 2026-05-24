@@ -4,6 +4,8 @@ datatype Participant = Participant(id: string, name: string, avail: seq<bool>, u
 
 datatype Event = Event(id: string, title: string, numSlots: int, participants: seq<Participant>)
 
+datatype Op = join(p: Participant) | setAvail(pid: string, avail: seq<bool>, at: int)
+
 function allAvailLen(ps: seq<Participant>, n: int): bool
   decreases |ps|
 {
@@ -454,7 +456,7 @@ lemma sparsifyUpto_ensures(a: seq<bool>, k: int)
   if (k != 0) {
     sparsifyUpto_ensures(a, k - 1);
     if (a[k - 1]) {
-      forall i { containsSnoc_ensures(sparsifyUpto(a, k - 1), k - 1, i); }
+      forall i {:trigger contains(sparsifyUpto(a, k - 1) + [k - 1], i)} { containsSnoc_ensures(sparsifyUpto(a, k - 1), k - 1, i); }
     }
   }
 }
@@ -517,4 +519,223 @@ lemma sparseRoundTrip_ensures(a: seq<bool>)
   // a[i] for in-range i. ---
   densify_ensures(sparsify(a), |a|);
   sparsify_ensures(a);
+}
+
+function countFreeAllFree(ps: seq<Participant>, s: int): bool
+  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (freeAt(ps[i], s) == true))
+  decreases |ps|
+{
+  true
+}
+
+lemma countFreeAllFree_ensures(ps: seq<Participant>, s: int)
+  requires forall i: int :: ((0 <= i) ==> (i < |ps|) ==> (freeAt(ps[i], s) == true))
+  ensures (countFree(ps, s) == |ps|)
+{
+}
+
+function heatmapMonotoneUnderJoin(e: Event, p: Participant): bool
+  requires wellFormed(e)
+  requires (|p.avail| == e.numSlots)
+{
+  true
+}
+
+lemma heatmapMonotoneUnderJoin_ensures(e: Event, p: Participant)
+  requires wellFormed(e)
+  requires (|p.avail| == e.numSlots)
+  ensures (|heatmap(addParticipant(e, p))| == e.numSlots)
+  ensures (|heatmap(e)| == e.numSlots)
+  ensures forall s: int :: ((0 <= s) ==> (s < e.numSlots) ==> (heatmap(addParticipant(e, p))[s] >= heatmap(e)[s]))
+{
+  // --- proof: addParticipant appends [p]; countFree(ps+[p]) = countFree(ps) +
+  // countFree([p]) >= countFree(ps), since countFree([p]) >= 0. ---
+  heatmap_ensures(addParticipant(e, p));
+  heatmap_ensures(e);
+  forall s | 0 <= s < e.numSlots
+    ensures heatmap(addParticipant(e, p))[s] >= heatmap(e)[s]
+  {
+    countFreeConcat_ensures(e.participants, [p], s);
+    countFree_ensures([p], s);
+  }
+}
+
+function unanimousIsBest(e: Event, s: int): bool
+  requires (e.numSlots >= 0)
+  requires (|e.participants| > 0)
+  requires (0 <= s)
+  requires (s < e.numSlots)
+  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (freeAt(e.participants[i], s) == true))
+{
+  true
+}
+
+lemma unanimousIsBest_ensures(e: Event, s: int)
+  requires (e.numSlots >= 0)
+  requires (|e.participants| > 0)
+  requires (0 <= s)
+  requires (s < e.numSlots)
+  requires forall i: int :: ((0 <= i) ==> (i < |e.participants|) ==> (freeAt(e.participants[i], s) == true))
+  ensures (|isBest(e)| == e.numSlots)
+  ensures (isBest(e)[s] == true)
+{
+  // --- proof: all-free ⇒ count at s is the full roster (countFreeAllFree), which
+  // is the max (every cell ≤ roster, B3) and positive; then the isBest mask law. ---
+  countFreeAllFree_ensures(e.participants, s);
+  heatmap_ensures(e);
+  maxCount_ensures(heatmap(e));
+  isBest_ensures(e);
+  assert heatmap(e)[s] == |e.participants|;
+  var w :| 0 <= w < |heatmap(e)| && heatmap(e)[w] == maxCount(heatmap(e));
+  assert heatmap(e)[w] <= |e.participants|;
+}
+
+function setAvailLWW(ps: seq<Participant>, pid: string, avail: seq<bool>, at: int): seq<Participant>
+  decreases |ps|
+{
+  if (|ps| == 0) then
+    []
+  else
+    if (ps[0].id == pid) then
+      if (at > ps[0].updatedAt) then
+        ([ps[0].(avail := avail, updatedAt := at)] + ps[1..])
+      else
+        ps
+    else
+      ([ps[0]] + setAvailLWW(ps[1..], pid, avail, at))
+}
+
+lemma setAvailLWW_ensures(ps: seq<Participant>, pid: string, avail: seq<bool>, at: int)
+  ensures (|setAvailLWW(ps, pid, avail, at)| == |ps|)
+{
+}
+
+function setAvailLWWCommutes(ps: seq<Participant>, pid: string, a1: seq<bool>, t1: int, a2: seq<bool>, t2: int): bool
+  requires (t1 != t2)
+  decreases |ps|
+{
+  true
+}
+
+lemma setAvailLWWCommutes_ensures(ps: seq<Participant>, pid: string, a1: seq<bool>, t1: int, a2: seq<bool>, t2: int)
+  requires (t1 != t2)
+  ensures (setAvailLWW(setAvailLWW(ps, pid, a1, t1), pid, a2, t2) == setAvailLWW(setAvailLWW(ps, pid, a2, t2), pid, a1, t1))
+{
+}
+
+function opOk(op: Op, n: int): bool
+{
+  match op {
+    case join(i_op_p) =>
+      (|i_op_p.avail| == n)
+    case setAvail(i_op_pid, i_op_avail, i_op_at) =>
+      (|i_op_avail| == n)
+  }
+}
+
+function allOpsOk(ops: seq<Op>, n: int): bool
+  decreases |ops|
+{
+  ((|ops| == 0) || (if !(opOk(ops[0], n)) then false else allOpsOk(ops[1..], n)))
+}
+
+function setAvailLWWPreservesLen(ps: seq<Participant>, pid: string, avail: seq<bool>, at: int, n: int): bool
+  requires allAvailLen(ps, n)
+  requires (|avail| == n)
+  decreases |ps|
+{
+  true
+}
+
+lemma setAvailLWWPreservesLen_ensures(ps: seq<Participant>, pid: string, avail: seq<bool>, at: int, n: int)
+  requires allAvailLen(ps, n)
+  requires (|avail| == n)
+  ensures allAvailLen(setAvailLWW(ps, pid, avail, at), n)
+{
+}
+
+function setAvailabilityLWW(e: Event, pid: string, avail: seq<bool>, at: int): Event
+  requires wellFormed(e)
+  requires (|avail| == e.numSlots)
+{
+  e.(participants := setAvailLWW(e.participants, pid, avail, at))
+}
+
+lemma setAvailabilityLWW_ensures(e: Event, pid: string, avail: seq<bool>, at: int)
+  requires wellFormed(e)
+  requires (|avail| == e.numSlots)
+  ensures wellFormed(setAvailabilityLWW(e, pid, avail, at))
+  ensures (setAvailabilityLWW(e, pid, avail, at).numSlots == e.numSlots)
+{
+  // --- proof: the LWW write keeps every row at width numSlots ---
+  setAvailLWWPreservesLen_ensures(e.participants, pid, avail, at, e.numSlots);
+}
+
+function applyOp(e: Event, op: Op): Event
+{
+  match op {
+    case join(i_op_p) =>
+      e.(participants := (e.participants + [i_op_p]))
+    case setAvail(i_op_pid, i_op_avail, i_op_at) =>
+      e.(participants := setAvailLWW(e.participants, i_op_pid, i_op_avail, i_op_at))
+  }
+}
+
+lemma applyOp_ensures(e: Event, op: Op)
+  ensures (applyOp(e, op).numSlots == e.numSlots)
+{
+}
+
+function applyOpPreservesInv(e: Event, op: Op): bool
+  requires wellFormed(e)
+  requires opOk(op, e.numSlots)
+{
+  true
+}
+
+lemma applyOpPreservesInv_ensures(e: Event, op: Op)
+  requires wellFormed(e)
+  requires opOk(op, e.numSlots)
+  ensures wellFormed(applyOp(e, op))
+{
+  // --- proof: case on the op. join appends a width-matching row (allAvailLenSnoc);
+  // setAvail LWW-writes a width-matching row (setAvailLWWPreservesLen). ---
+  if (op.join?) {
+    allAvailLenSnoc_ensures(e.participants, op.p, e.numSlots);
+  } else {
+    setAvailLWWPreservesLen_ensures(e.participants, op.pid, op.avail, op.at, e.numSlots);
+  }
+}
+
+function replay(e: Event, ops: seq<Op>): Event
+  decreases |ops|
+{
+  if (|ops| == 0) then
+    e
+  else
+    replay(applyOp(e, ops[0]), ops[1..])
+}
+
+function replayPreservesInv(e: Event, ops: seq<Op>): bool
+  requires wellFormed(e)
+  requires allOpsOk(ops, e.numSlots)
+  decreases |ops|
+{
+  true
+}
+
+lemma replayPreservesInv_ensures(e: Event, ops: seq<Op>)
+  requires wellFormed(e)
+  requires allOpsOk(ops, e.numSlots)
+  ensures wellFormed(replay(e, ops))
+  ensures (replay(e, ops).numSlots == e.numSlots)
+  decreases |ops|
+{
+  // --- proof: induction on the op log. applyOp preserves Inv (applyOpPreservesInv)
+  // and numSlots (applyOp_ensures), so allOpsOk carries to the tail and the IH applies. ---
+  if (|ops| != 0) {
+    applyOpPreservesInv_ensures(e, ops[0]);
+    applyOp_ensures(e, ops[0]);
+    replayPreservesInv_ensures(applyOp(e, ops[0]), ops[1..]);
+  }
 }

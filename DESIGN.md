@@ -107,10 +107,10 @@ interface Event {
     ║  VERIFIED pure core — src/domain.ts (//@ verify)              ║
     ║  [proved] wellFormed/allAvailLen, countFree, heatmap,         ║
     ║    maxCount, isBest, availableAtLeast; countFree homomorphism ║
-    ║    (convergence core); init/add/setAvailability/removeP       ║
-    ║    (Inv-preserving mutations); sparsify/densify codec (E1)    ║
-    ║  [planned] participantsAt, overlap (queries);                 ║
-    ║    applyOp/replay (op-log, for D1/D2)                         ║
+    ║    + monotonicity; init/add/setAvailability/removeP           ║
+    ║    (Inv-preserving mutations); sparsify/densify codec (E1);   ║
+    ║    Op/applyOp/replay (Inv-preserving) + setAvailLWW (D2 LWW)  ║
+    ║  [planned] participantsAt, overlap (queries); D1 full-perm   ║
     ╚═══════════════════════════════════════════════════════════════╝
 ```
 
@@ -127,7 +127,7 @@ interface Event {
 
 ## 7. Properties — the staged catalog
 
-Properties are grouped into families and sequenced into stages. We design the data model now so every family is reachable; we prove them in order. Spec sketches below use LemmaScript syntax (`forall(k, P)`, `\result`, no `\old`). **Families A1, B, the C4 threshold, the Family-D convergence core, the Stage-0b mutations, and the E1 sparse-codec round-trip are implemented and verified (`src/domain.ts`, 62 VCs, 0 errors) — those specs are the real ones; the rest are illustrative and get pinned during implementation.**
+Properties are grouped into families and sequenced into stages. We design the data model now so every family is reachable; we prove them in order. Spec sketches below use LemmaScript syntax (`forall(k, P)`, `\result`, no `\old`). **Families A1, B, C, the Family-D convergence core + D2 LWW + op-model/replay, the Stage-0b mutations, and the E1 sparse-codec round-trip are implemented and verified (`src/domain.ts`, 81 VCs, 0 errors) — those specs are the real ones; the rest are illustrative and get pinned during implementation.**
 
 A note from Stage 0 that shapes the specs: LemmaScript emits each pure function's `//@ ensures` as a *separate* `_ensures` lemma rather than a Dafny postcondition. So a function cannot rely on a callee's `ensures` inside its own body — callee preconditions must be discharged structurally. This pushed three concrete choices: aggregation is written as **pure recursive functions** (not imperative loops, which can't take proof hints); the counting core is **total** (`freeAt` guards the bit access) so it carries no precondition and composes freely; and `maxCount` is **precondition-free** for the same reason.
 
@@ -175,17 +175,24 @@ function isBest(e: Event): boolean[]
 
 (A `number[]` list of best-slot indices — and the membership-iff characterization — remains a possible verified extraction later; the mask is the load-bearing form.)
 
-### Family C — Monotonicity ("more people = better")
+### Family C — Monotonicity ("more people = better") — **implemented & verified**
 Phrased without `\old` — as a relation between `f(e)` and `f(g(e))`, proved with the pure-carrier-lemma technique (TS body `return true`, induction in the generated `_ensures`).
 
+**Implemented & verified** (real specs):
 ```ts
-//@ requires Inv(e) && p.avail.length === e.numSlots && !idTaken(e, p.id)
+// C1: a join never lowers any slot's count. Proof: countFree(ps ++ [p]) =
+// countFree(ps) + countFree([p]) >= countFree(ps) (homomorphism + non-negativity).
+//@ requires wellFormed(e) && p.avail.length === e.numSlots
+//@ ensures heatmap(addParticipant(e, p)).length === e.numSlots
+//@ ensures heatmap(e).length === e.numSlots
 //@ ensures forall(s, 0 <= s && s < e.numSlots ==> heatmap(addParticipant(e, p))[s] >= heatmap(e)[s])
 function heatmapMonotoneUnderJoin(e: Event, p: Participant): boolean { return true; }
 
-// "if everyone is free at s, then s is a best slot" (against the verified isBest mask)
-//@ requires Inv(e) && e.participants.length > 0
-//@ requires forall(i, e.participants[i].avail[s] === true) && 0 <= s && s < e.numSlots
+// C2: if everyone is free at s, then s is a best slot. The hypothesis uses the
+// total `freeAt`, so it needs no well-formedness to be stated.
+//@ requires e.numSlots >= 0 && e.participants.length > 0 && 0 <= s && s < e.numSlots
+//@ requires forall(i, 0 <= i && i < e.participants.length ==> freeAt(e.participants[i], s) === true)
+//@ ensures isBest(e).length === e.numSlots
 //@ ensures isBest(e)[s] === true
 function unanimousIsBest(e: Event, s: number): boolean { return true; }
 ```
@@ -199,7 +206,7 @@ Threshold query — **implemented & verified** (also a boolean mask, matching `i
 function availableAtLeast(e: Event, k: number): boolean[]
 ```
 
-### Family D — Convergence / order-independence (the headline) — **core implemented & verified**
+### Family D — Convergence / order-independence (the headline) — **batch core + D2 LWW + op-model verified**
 Because the heatmap is a fold over per-participant rows, and `countFree` is **total**, the per-slot count is a *homomorphism from participant-list concatenation to integer addition*. That gives the algebraic backbone of "order doesn't matter," and it's proved:
 
 ```ts
@@ -220,11 +227,18 @@ function countFreeComm(xs: Participant[], ys: Participant[], s: number): boolean
 function heatmapBatchOrderInvariant(a: Event, b: Event, xs: Participant[], ys: Participant[]): boolean { return true; }
 ```
 
-This is the formal "why login-free merge is safe": the aggregate factors through the commutative monoid (ℤ, +), so batch order and grouping are irrelevant. Still planned:
+This is the formal "why login-free merge is safe": the aggregate factors through the commutative monoid (ℤ, +), so batch order and grouping are irrelevant.
 
-- **D1 (full element-level permutation invariance).** The natural statement — `multiset(xs) === multiset(ys) ==> countFree(xs, s) === countFree(ys, s)` — is **not expressible in `//@` specs today** (no `multiset` type, no raw-Dafny escape; see `LS_TODO.md`). The concat-homomorphism above is the expressible abelian-monoid core; full permutation-invariance is one lemma away once specs can name `multiset`.
-- **D2 (same-participant LWW convergence)** — once the op model lands, concurrent edits to one participant resolve by `(updatedAt, id)`; `max`-by-timestamp is commutative/associative, so the final row is order-independent (`reference-crdts` precedent).
-- **Op model / replay** (`applyOp`, `replay`) — the operational wrapper (join / setAvail with timestamps) over which D1/D2 are ultimately stated; deferred until the mutations (Stage 0b) land.
+**D2 (same-participant LWW convergence) — implemented & verified.** Concurrent edits to *one* participant (e.g. two devices) resolve last-writer-wins by timestamp. `setAvailLWW` writes a row only if the incoming timestamp is strictly newer; two writes to the same participant with distinct timestamps commute:
+```ts
+//@ requires t1 !== t2
+//@ ensures setAvailLWW(setAvailLWW(ps, pid, a1, t1), pid, a2, t2) === setAvailLWW(setAvailLWW(ps, pid, a2, t2), pid, a1, t1)
+function setAvailLWWCommutes(ps, pid, a1, t1, a2, t2): boolean { return true; }
+```
+
+**Op model / replay — implemented & verified.** A total `applyOp` (join a row / LWW-repaint a row) and `replay` (fold an op log) preserve the invariant — `applyOpPreservesInv` and `replayPreservesInv` show every reachable event state is well-formed. (`applyOp`/`replay` are total and inline the pure transforms, so they compose without a `wellFormed` precondition; preservation is proved separately — the CRDT discipline of total ops + invariant lemmas.)
+
+**Still planned — D1 (full element-level permutation invariance).** The natural statement, `multiset(xs) === multiset(ys) ==> countFree(xs, s) === countFree(ys, s)`, is **not expressible in `//@` specs today** (no `multiset` type, no raw-Dafny escape; see `LS_TODO.md`). The concat-homomorphism is the expressible abelian-monoid core; full permutation-invariance is one lemma away once specs can name `multiset`.
 
 ### Family E — Export faithfulness + query soundness
 The dense⟷sparse codec is **implemented & verified**, characterized through membership (`contains`) rather than sortedness — `i` is in `sparsify(a)` iff `a[i]` is an in-range true bit, and `densify` reads `contains` pointwise, so the round-trip is the identity.
@@ -278,8 +292,9 @@ function overlap(e: Event, pids: string[]): number[]
 | **2 — convergence (core)** | `countFreeConcat` homomorphism, `countFreeComm` batch commutativity, `heatmapBatchOrderInvariant` — order-independence of the heatmap under participant batches. | D (core) | ✅ **verified** |
 | **0b — mutations** | `initEvent`/`addParticipant`/`setAvailability`/`removeParticipant` preserve `Inv`. | A | ✅ **verified** |
 | **0b — codec** | sparse codec `densify(sparsify) == id` (membership-characterized). | E1 | ✅ **verified** |
-| **1 — monotonicity** | `heatmapMonotoneUnderJoin`, `unanimousIsBest`. Cheap given B. | C | |
-| **2b — convergence (deep)** | op model + `replay`; D2 (same-participant LWW); D1 full permutation-invariance (needs `multiset` in specs — see `LS_TODO.md`). | D | |
+| **1 — monotonicity** | `heatmapMonotoneUnderJoin` (a join never lowers a count), `unanimousIsBest` (all-free ⇒ best slot). | C | ✅ **verified** |
+| **2b — op-model + LWW** | `Op`/`applyOp`/`replay` (total) preserve `Inv` (`applyOpPreservesInv`, `replayPreservesInv`); `setAvailLWWCommutes` — D2: same-participant LWW writes with distinct timestamps converge. | D2 + op-log | ✅ **verified** |
+| **2 — convergence (deep, remaining)** | D1 full element-permutation invariance — blocked: needs `multiset` in specs (see `LS_TODO.md`). | D1 | |
 | **3 — query layer** | `participantsAt`, `overlap` (needs A2 id-uniqueness); query-over-export soundness E2; canonical encoding E4. | F, E2, E4 | |
 | **4 — richness (optional)** | Ternary availability (`Available \| IfNeedBe \| Unavailable`) → unlocks rallly-style score-formula pinning + tiebreaker injectivity on top of the grid. | (extends B/C) | |
 
@@ -291,7 +306,7 @@ Each stage is shippable; the aggregation core is trustworthy after Stage 0, with
 - **The same `domain.ts` runs everywhere** — React (optimistic heatmap), the Durable Object (authoritative mutate), and the query endpoint (replay over corpus). No adapter, no second implementation, no desync.
 - **`ensures` are separate lemmas.** LemmaScript emits each pure function's `//@ ensures` as a standalone `_ensures` lemma, not a Dafny postcondition. Consequences confirmed so far: (1) write **pure recursive functions**, not imperative loops (`method`s can't take proof hints); (2) a function can't lean on a callee's `ensures` in its own body, so callee preconditions are discharged structurally — this is why the counting core is **total** (`freeAt`/`countFree` carry no precondition) and `maxCount` is precondition-free, so they compose inside `heatmap`, `isBest`, and the convergence lemmas; (3) lemmas that need induction get hand-written proofs in `domain.dfy` (e.g. `allAvailLen_ensures`, `heatmapUpto_ensures`, `maxCount_ensures`, `countFreeConcat_ensures`), which Dafny then re-checks. Many simple `_ensures` auto-discharge.
 - **Induction without `\old`:** relational/monotonicity/convergence lemmas use the pure-carrier technique (TS body `return true`, induction in the generated `_ensures`).
-- **`regen` caveat.** `lsc regen` corrupts this file on any mid-file declaration change (duplicates trailing decls — see `LS_TODO.md`). Working loop: `lsc gen` → `cp domain.dfy.gen domain.dfy` → reapply the hand proofs → `lsc check`.
+- **`regen` + the `.dfy.base` gotcha.** `lsc regen` does a 3-way merge and preserves proof additions — but it anchors on `foo.dfy.base`, which it deletes only on success. A `regen` that ends in a verification error leaves a stale `.base`, and the *next* regen mis-merges (duplicate declarations). Fix: `rm -f src/domain.dfy.base` before re-running `regen` (`.base` is gitignored). New top-level functions are appended to the end of `domain.ts` so existing proofs aren't disturbed.
 - **Honest scope:** we state each `ensures` precisely and name the trusted edges inline (I/O, timezone labeling, DB-enforced append-only). No "verified end-to-end" claim, no "just a demo."
 
 ## 11. Open questions / deferred

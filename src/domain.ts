@@ -369,3 +369,151 @@ export function sparseRoundTrip(a: boolean[]): boolean {
   //@ ensures forall(i, 0 <= i && i < a.length ==> densify(sparsify(a), a.length)[i] === a[i])
   return true
 }
+
+// ── Monotonicity (Stage 1 / Family C): more availability only helps ──
+
+// If every participant is free at slot s, the count there is the full roster.
+export function countFreeAllFree(ps: Participant[], s: number): boolean {
+  //@ verify
+  //@ requires forall(i, 0 <= i && i < ps.length ==> freeAt(ps[i], s) === true)
+  //@ decreases ps.length
+  //@ ensures countFree(ps, s) === ps.length
+  return true
+}
+
+// C1: a participant joining never lowers any slot's count (the count at each
+// slot grows by 0 or 1). Proof: countFree(ps ++ [p]) = countFree(ps) + countFree([p]),
+// and countFree([p]) >= 0.
+export function heatmapMonotoneUnderJoin(e: Event, p: Participant): boolean {
+  //@ verify
+  //@ requires wellFormed(e)
+  //@ requires p.avail.length === e.numSlots
+  //@ ensures heatmap(addParticipant(e, p)).length === e.numSlots
+  //@ ensures heatmap(e).length === e.numSlots
+  //@ ensures forall(s, 0 <= s && s < e.numSlots ==> heatmap(addParticipant(e, p))[s] >= heatmap(e)[s])
+  return true
+}
+
+// C2: if everyone is free at slot s, then s is a best slot (it attains the max,
+// which is positive). freeAt is total, so the hypothesis needs no well-formedness.
+export function unanimousIsBest(e: Event, s: number): boolean {
+  //@ verify
+  //@ requires e.numSlots >= 0
+  //@ requires e.participants.length > 0
+  //@ requires 0 <= s && s < e.numSlots
+  //@ requires forall(i, 0 <= i && i < e.participants.length ==> freeAt(e.participants[i], s) === true)
+  //@ ensures isBest(e).length === e.numSlots
+  //@ ensures isBest(e)[s] === true
+  return true
+}
+
+// ── LWW convergence (Stage 2b / Family D2): same-participant edits ──
+//
+// When two edits target the SAME participant (e.g. they reconnect and repaint
+// from two devices), they're resolved last-writer-wins by timestamp. With
+// distinct timestamps the row converges to the newer write regardless of the
+// order the two edits are applied — the CRDT LWW-register law.
+
+// Write one participant's row iff the incoming timestamp is strictly newer.
+export function setAvailLWW(ps: Participant[], pid: string, avail: boolean[], at: number): Participant[] {
+  //@ verify
+  //@ decreases ps.length
+  //@ ensures \result.length === ps.length
+  if (ps.length === 0) return []
+  if (ps[0].id === pid) {
+    if (at > ps[0].updatedAt) return [{ ...ps[0], avail: avail, updatedAt: at }, ...ps.slice(1)]
+    return ps
+  }
+  return [ps[0], ...setAvailLWW(ps.slice(1), pid, avail, at)]
+}
+
+// D2: two LWW writes to the same participant with distinct timestamps commute.
+export function setAvailLWWCommutes(ps: Participant[], pid: string, a1: boolean[], t1: number, a2: boolean[], t2: number): boolean {
+  //@ verify
+  //@ requires t1 !== t2
+  //@ decreases ps.length
+  //@ ensures setAvailLWW(setAvailLWW(ps, pid, a1, t1), pid, a2, t2) === setAvailLWW(setAvailLWW(ps, pid, a2, t2), pid, a1, t1)
+  return true
+}
+
+// ── Op model & replay (Stage 2b): the op log preserves the invariant ──
+//
+// The Durable Object applies a totally-ordered log of ops. Each op touches one
+// participant (join a row, or LWW-repaint a row). applyOp and replay preserve
+// the well-formedness invariant, so any reachable event state is well-formed.
+
+type Op =
+  | { kind: "join"; p: Participant }
+  | { kind: "setAvail"; pid: string; avail: boolean[]; at: number }
+
+// An op is well-formed against grid width n iff the row it carries has width n.
+export function opOk(op: Op, n: number): boolean {
+  //@ verify
+  if (op.kind === "join") return op.p.avail.length === n
+  return op.avail.length === n
+}
+
+export function allOpsOk(ops: Op[], n: number): boolean {
+  //@ verify
+  //@ decreases ops.length
+  if (ops.length === 0) return true
+  if (!opOk(ops[0], n)) return false
+  return allOpsOk(ops.slice(1), n)
+}
+
+export function setAvailLWWPreservesLen(ps: Participant[], pid: string, avail: boolean[], at: number, n: number): boolean {
+  //@ verify
+  //@ requires allAvailLen(ps, n)
+  //@ requires avail.length === n
+  //@ decreases ps.length
+  //@ ensures allAvailLen(setAvailLWW(ps, pid, avail, at), n)
+  return true
+}
+
+// A participant repaints their row, last-writer-wins by timestamp.
+export function setAvailabilityLWW(e: Event, pid: string, avail: boolean[], at: number): Event {
+  //@ verify
+  //@ requires wellFormed(e)
+  //@ requires avail.length === e.numSlots
+  //@ ensures wellFormed(\result)
+  //@ ensures \result.numSlots === e.numSlots
+  return { ...e, participants: setAvailLWW(e.participants, pid, avail, at) }
+}
+
+// applyOp is TOTAL — it inlines the pure row transforms (so it composes inside
+// replay without a wellFormed precondition). Invariant preservation is proved
+// separately by applyOpPreservesInv.
+export function applyOp(e: Event, op: Op): Event {
+  //@ verify
+  //@ ensures \result.numSlots === e.numSlots
+  if (op.kind === "join") return { ...e, participants: [...e.participants, op.p] }
+  return { ...e, participants: setAvailLWW(e.participants, op.pid, op.avail, op.at) }
+}
+
+export function applyOpPreservesInv(e: Event, op: Op): boolean {
+  //@ verify
+  //@ requires wellFormed(e)
+  //@ requires opOk(op, e.numSlots)
+  //@ ensures wellFormed(applyOp(e, op))
+  return true
+}
+
+// replay folds a totally-ordered op log. Total (no precondition); the DO feeds
+// it a well-formed event and matching ops, and replayPreservesInv shows the
+// result stays well-formed — so every reachable event state is well-formed.
+export function replay(e: Event, ops: Op[]): Event {
+  //@ verify
+  //@ decreases ops.length
+  if (ops.length === 0) return e
+  return replay(applyOp(e, ops[0]), ops.slice(1))
+}
+
+export function replayPreservesInv(e: Event, ops: Op[]): boolean {
+  //@ verify
+  //@ requires wellFormed(e)
+  //@ requires allOpsOk(ops, e.numSlots)
+  //@ decreases ops.length
+  //@ ensures wellFormed(replay(e, ops))
+  //@ ensures replay(e, ops).numSlots === e.numSlots
+  return true
+}
