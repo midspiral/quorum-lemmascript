@@ -240,7 +240,7 @@ function setAvailLWWCommutes(ps, pid, a1, t1, a2, t2): boolean { return true; }
 
 **Op model / replay — implemented & verified.** A total `applyOp` (join a row / LWW-repaint a row) and `replay` (fold an op log) preserve the invariant — `applyOpPreservesInv` and `replayPreservesInv` show every reachable event state is well-formed. (`applyOp`/`replay` are total and inline the pure transforms, so they compose without a `wellFormed` precondition; preservation is proved separately — the CRDT discipline of total ops + invariant lemmas.)
 
-**Still planned — D1 (full element-level permutation invariance).** The natural statement, `multiset(xs) === multiset(ys) ==> countFree(xs, s) === countFree(ys, s)`, is **not expressible in `//@` specs today** (no `multiset` type, no raw-Dafny escape; see `LS_TODO.md`). The concat-homomorphism is the expressible abelian-monoid core; full permutation-invariance is one lemma away once specs can name `multiset`.
+**Verified — D1 (full element-level permutation invariance).** The natural statement, `perm(xs, ys) ==> countFree(xs, s) === countFree(ys, s)`, is now expressible: the `perm(...)` spec predicate (lowering to Dafny's `multiset(a) == multiset(b)`) was added to LemmaScript to close exactly this gap. `countFreePerm` proves it, and `heatmapPermInvariant` lifts it to the observable — two events whose participant lists are permutations of each other have identical heatmaps (subsuming the two-batch `heatmapBatchOrderInvariant`). The proof is a remove-one-element induction that reuses the concat-homomorphism `countFreeConcat` as its remove-at-index step — the "one lemma away" the abelian-monoid core promised.
 
 ### Family E — Export faithfulness + query soundness
 The dense⟷sparse codec is **implemented & verified**, characterized through membership (`contains`) rather than sortedness — `i` is in `sparsify(a)` iff `a[i]` is an in-range true bit, and `densify` reads `contains` pointwise, so the round-trip is the identity.
@@ -306,7 +306,7 @@ function overlap(e: Event, pids: string[]): boolean[]
 | **0b — codec** | sparse codec `densify(sparsify) == id` (membership-characterized). | E1 | ✅ **verified** |
 | **1 — monotonicity** | `heatmapMonotoneUnderJoin` (a join never lowers a count), `unanimousIsBest` (all-free ⇒ best slot). | C | ✅ **verified** |
 | **2b — op-model + LWW** | `Op`/`applyOp`/`replay` (total) preserve `Inv` (`applyOpPreservesInv`, `replayPreservesInv`); `setAvailLWWCommutes` — D2: same-participant LWW writes with distinct timestamps converge. | D2 + op-log | ✅ **verified** |
-| **2 — convergence (deep, remaining)** | D1 full element-permutation invariance — blocked: needs `multiset` in specs (see `LS_TODO.md`). | D1 | |
+| **2 — convergence (deep)** | D1 full element-permutation invariance — `countFreePerm` / `heatmapPermInvariant` via the `perm(...)` predicate. | D1 | ✅ **verified** |
 | **3 — query layer** | `participantsAt`, `overlap` (needs A2 id-uniqueness); query-over-export soundness E2; canonical encoding E4. | F, E2, E4 | |
 | **4 — richness (optional)** | Ternary availability (`Available \| IfNeedBe \| Unavailable`) → unlocks rallly-style score-formula pinning + tiebreaker injectivity on top of the grid. | (extends B/C) | |
 

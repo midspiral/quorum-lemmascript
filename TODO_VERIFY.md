@@ -3,12 +3,13 @@
 Tracks the verification work still open in `src/domain.ts`. Each item lists the
 goal, an illustrative spec, what it depends on, and notes/blockers.
 
-**Verified so far** (89 VCs, 0 errors — see `DESIGN.md §9`):
-`domain.ts` (81) — Stage 0 aggregation (heatmap = count, bounded; `maxCount`; `isBest`;
+**Verified so far** (100 VCs, 0 errors — see `DESIGN.md §9`):
+`domain.ts` (90) — Stage 0 aggregation (heatmap = count, bounded; `maxCount`; `isBest`;
 `availableAtLeast`), Stage 0b mutations (`init`/`add`/`setAvailability`/`removeParticipant`
 preserve `Inv`) + sparse codec round-trip (E1), Stage 1 monotonicity (Family C), Stage 2b
-convergence core + D2 LWW + op-model/`replay` (Family D).
-`grid.ts` (8) — the cell↔slot mapping `gridIndex` is in-range + injective (shrinks the
+convergence core + D2 LWW + op-model/`replay` (Family D), and **D1 full permutation
+invariance** (`countFreePerm` / `heatmapPermInvariant` via the `perm(...)` predicate — §3).
+`grid.ts` (10) — the cell↔slot mapping `gridIndex` is in-range + injective (shrinks the
 slotIndex⟷labeling trusted edge to calendar/timezone only).
 
 Workflow reminders: append new functions to the **end** of `domain.ts`; `rm -f src/domain.dfy.base`
@@ -50,14 +51,15 @@ function overlap(e: Event, pids: string[]): boolean[]
   count back to `countFree`; needs A2 so the collected ids are distinct (no double count).
 - Consider realizing `overlap` as a boolean mask (like `isBest`) to avoid set-membership reasoning.
 
-## 3. D1 — full element-level permutation invariance  ⛔ blocked
-**Goal.** `multiset(xs) === multiset(ys) ==> countFree(xs, s) === countFree(ys, s)`,
-i.e. the heatmap depends only on the *set* of participant rows, not their order.
-- **Blocker.** `//@` specs can't name `multiset` (no raw-Dafny escape). See `LS_TODO.md`.
-  The verified abelian-monoid core (`countFreeConcat` + `countFreeComm`) is the expressible
-  substitute; D1 is one lemma away once LemmaScript exposes `multiset` in spec position.
-- Alternative without `multiset`: a recursive `isPermutation` predicate + a remove-at-index
-  lemma built on `countFreeConcat` — heavier, but unblocks it today if needed.
+## 3. D1 — full element-level permutation invariance  ✅ done
+**Goal.** `perm(xs, ys) ==> countFree(xs, s) === countFree(ys, s)`, i.e. the heatmap depends
+only on the *multiset* of participant rows, not their order.
+- **Unblocked.** LemmaScript now exposes `perm(a, b)` in spec position (it lowers to Dafny's
+  `multiset(a) == multiset(b)`). `countFreePerm` states it; `heatmapPermInvariant` lifts it to
+  the observable, subsuming the two-batch `heatmapBatchOrderInvariant`.
+- **Proof** (in `domain.dfy`): the remove-at-index route anticipated here — a `CountFreeRemoveAt`
+  helper built on `countFreeConcat`, then a remove-one-element induction. No `isPermutation`
+  recursion needed; `perm` + the existing homomorphism were enough.
 
 ## 4. Event-level export codec (E1 completion) + E2 query-over-export soundness
 **Goal.** Whole-`Event` encode/decode round-trip, then queries over the export match live.

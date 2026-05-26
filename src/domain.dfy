@@ -805,7 +805,6 @@ function countFreePerm(xs: seq<Participant>, ys: seq<Participant>, s: int): bool
 lemma countFreePerm_ensures(xs: seq<Participant>, ys: seq<Participant>, s: int)
   requires Perm(xs, ys)
   ensures (countFree(xs, s) == countFree(ys, s))
-  decreases |xs|
 {
   // --- proof: remove-one-element induction. Pull the head `x` of xs out of
   // both lists (it must occur in ys since the multisets are equal), peel it off

@@ -91,11 +91,17 @@ It wasn't frictionless, and the honest picture is more useful than a glossy one:
   `mulGeRight`) so every step is linear. It now passes even under `--isolate-assertions`.
   Rule of thumb earned: for anything multiplicative, reach for an inductive helper before a
   bare `assert`.
-- **What we couldn't say.** The cleanest statement of convergence — full permutation
-  invariance via `multiset(xs) == multiset(ys)` — isn't expressible in `//@` specs (no
-  `multiset` type, no raw-Dafny escape). We proved the abelian-monoid core (the
-  concat-homomorphism), which is the expressible substitute, and recorded the gap in
-  `LS_TODO.md`. Knowing the edge of what you can *state* is part of the craft.
+- **What we couldn't say — and then could.** The cleanest statement of convergence — full
+  permutation invariance via `multiset(xs) == multiset(ys)` — wasn't expressible in `//@`
+  specs at the time (no `multiset` type, no raw-Dafny escape). We shipped the abelian-monoid
+  core (the concat-homomorphism) as the expressible substitute and recorded the gap. *That gap
+  became a feature request.* LemmaScript now has a spec-only `perm(a, b)` predicate (lowering
+  to Dafny's `multiset(a) == multiset(b)`), and the natural theorem states directly:
+  `countFreePerm` (`perm(xs, ys) ==> countFree(xs, s) === countFree(ys, s)`) and the lifted
+  `heatmapPermInvariant`, which subsumes the two-batch `heatmapBatchOrderInvariant`. The proof
+  was exactly the "one lemma away" we'd predicted — a remove-at-index helper over the existing
+  `countFreeConcat`. Knowing the edge of what you can *state* is part of the craft; so is
+  pushing that edge when a case study keeps bumping into it.
 
 ## 7. Verified is not the same as shipped
 
@@ -112,8 +118,8 @@ convergence guarantee let the lock-free multi-device backend be built with confi
 than hope; the slot-index abstraction made presentation changes (dates vs. weekdays, the
 calendar UI) cost nothing in proofs.
 
-**Never claimed:** end-to-end correctness. The *aggregate semantics* are proven — 95 VCs
-across `domain.ts` (85) and `grid.ts` (10), 0 errors — while the React UI, the
+**Never claimed:** end-to-end correctness. The *aggregate semantics* are proven — 100 VCs
+across `domain.ts` (90) and `grid.ts` (10), 0 errors — while the React UI, the
 WebSocket/Durable-Object I/O, and the calendar/timezone labeling are a stated, deliberate
 trust boundary (`DESIGN.md §2`).
 

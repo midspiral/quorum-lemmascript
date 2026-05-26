@@ -14,7 +14,7 @@ implementation.
 
 ## What is verified
 
-The trustworthy artifact of a scheduler is the **aggregate**. `src/domain.ts` (85 VCs) and
+The trustworthy artifact of a scheduler is the **aggregate**. `src/domain.ts` (90 VCs) and
 `src/grid.ts` (10 VCs) prove, with 0 errors:
 
 - **Aggregation** — `heatmap(e)[s]` is *exactly* the number of participants free at slot
@@ -25,7 +25,10 @@ The trustworthy artifact of a scheduler is the **aggregate**. `src/domain.ts` (8
 - **Convergence (the headline)** — `countFree` is a homomorphism from participant-list
   concatenation to integer addition, so the heatmap is **independent of the order** edits
   arrive in; same-participant edits resolve last-writer-wins and converge. This is the
-  formal justification for the lock-free, optimistic, no-login design.
+  formal justification for the lock-free, optimistic, no-login design. Now stated in full
+  generality: `heatmapPermInvariant` proves the heatmap depends only on the *multiset* of
+  participant rows — **any** reordering, not just a two-batch swap — via the `perm(...)`
+  spec predicate added to LemmaScript for exactly this.
 - **Invariant preservation** — `initEvent` / `addParticipant` / `setAvailability` /
   `removeParticipant`, and the op-log `replay`, all preserve the structural invariant.
 - **Faithful export** — the sparse availability codec round-trips
@@ -101,6 +104,6 @@ Local mode stores events in `localStorage`; the backend (opt-in via `VITE_REMOTE
 
 Verified core + a TypeScript React SPA (dates/weekday grids, paint/group, who's-free hover,
 NDJSON export) + a working Cloudflare Durable Object backend for live sync. Deferred:
-participant-id uniqueness → exact `participantsAt` and subgroup `overlap`; full
-permutation-invariance (needs `multiset` in `//@` specs); a D1/R2 query corpus. See
-`TODO_VERIFY.md`.
+participant-id uniqueness → exact `participantsAt` and subgroup `overlap`; a D1/R2 query
+corpus. (Full element-level permutation-invariance — once deferred for lack of `multiset`
+in specs — is now **verified** via the `perm(...)` predicate; see `TODO_VERIFY.md`.)
