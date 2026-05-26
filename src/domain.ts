@@ -541,3 +541,33 @@ export function whoIsFree(e: Event, s: number): Participant[] {
   //@ ensures \result.length === heatmap(e)[s]
   return freeParticipants(e.participants, s)
 }
+
+// ── Convergence (Family D1): full element-level permutation invariance ──
+//
+// countFreeConcat above gives order-independence for two *batches*; `perm(...)`
+// lifts it to ANY reordering of the participant rows. This is the complete
+// element-level convergence statement that was previously inexpressible — `//@`
+// specs could not name a multiset, so the abelian-monoid core (the
+// concat-homomorphism) was the strongest substitute. With `perm`, the natural
+// theorem states directly. (Proof in the companion .dfy: a remove-one-element
+// induction that reuses `countFreeConcat` as its remove-at-index step.)
+export function countFreePerm(xs: Participant[], ys: Participant[], s: number): boolean {
+  //@ verify
+  //@ requires perm(xs, ys)
+  //@ ensures countFree(xs, s) === countFree(ys, s)
+  return true
+}
+
+// Lifted to the observable: two events whose participant lists are permutations
+// of each other have identical heatmaps (and hence identical isBest /
+// availableAtLeast). This subsumes heatmapBatchOrderInvariant — a batch swap is
+// just one permutation among all of them.
+export function heatmapPermInvariant(a: Event, b: Event): boolean {
+  //@ verify
+  //@ requires a.numSlots >= 0 && a.numSlots === b.numSlots
+  //@ requires perm(a.participants, b.participants)
+  //@ ensures heatmap(a).length === a.numSlots
+  //@ ensures heatmap(b).length === b.numSlots
+  //@ ensures forall(s, 0 <= s && s < a.numSlots ==> heatmap(a)[s] === heatmap(b)[s])
+  return true
+}
