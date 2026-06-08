@@ -110,7 +110,7 @@ interface Event {
     ║    + monotonicity; init/add/setAvailability/removeP           ║
     ║    (Inv-preserving mutations); sparsify/densify codec (E1);   ║
     ║    Op/applyOp/replay (Inv-preserving) + setAvailLWW (D2 LWW)  ║
-    ║  [planned] participantsAt, overlap (queries); D1 full-perm   ║
+    ║  [planned] participantsAt, overlap (queries); D1 full-perm    ║
     ╚═══════════════════════════════════════════════════════════════╝
 ```
 
