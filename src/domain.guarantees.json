@@ -1,0 +1,547 @@
+{
+  "file": "src/domain.ts",
+  "generated": "2026-06-16",
+  "assumesVerified": true,
+  "summary": {
+    "contracts": 32,
+    "confirmed": 32,
+    "disputed": 0,
+    "gaps": 0
+  },
+  "guarantees": [
+    {
+      "specId": "countFree",
+      "function": "countFree",
+      "requirement": "A count between 0 and the number of participants.",
+      "spec": {
+        "signature": "countFree(ps: Participant[], s: number): number",
+        "requires": [],
+        "ensures": [
+          "0 <= \\result && \\result <= ps.length"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The count of free participants at a given slot is between 0 and the total number of participants."
+    },
+    {
+      "specId": "heatmap",
+      "function": "heatmap",
+      "requirement": "The per-slot count of how many participants are free at each slot.",
+      "spec": {
+        "signature": "heatmap(e: Event): number[]",
+        "requires": [
+          "e.numSlots >= 0"
+        ],
+        "ensures": [
+          "\\result.length === e.numSlots",
+          "forall(s, 0 <= s && s < e.numSlots ==> \\result[s] === countFree(e.participants, s))",
+          "forall(s, 0 <= s && s < e.numSlots ==> 0 <= \\result[s] && \\result[s] <= e.participants.length)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The heatmap function produces an array where each element at slot s equals the count of free participants at that slot, and all values are bounded by the number of participants."
+    },
+    {
+      "specId": "maxCount",
+      "function": "maxCount",
+      "requirement": "The largest count in the heatmap, and for a non-empty heatmap a value that some slot actually attains.",
+      "spec": {
+        "signature": "maxCount(h: number[]): number",
+        "requires": [],
+        "ensures": [
+          "forall(s, 0 <= s && s < h.length ==> h[s] <= \\result)",
+          "h.length > 0 ==> exists(s, 0 <= s && s < h.length && h[s] === \\result)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The maxCount function returns the maximum value in the heatmap array, and if the array is non-empty, that maximum is actually achieved at some index."
+    },
+    {
+      "specId": "isBest",
+      "function": "isBest",
+      "requirement": "Marks exactly the slots whose free-count ties the maximum, with nothing marked until at least one participant has entered availability.",
+      "spec": {
+        "signature": "isBest(e: Event): boolean[]",
+        "requires": [
+          "e.numSlots >= 0"
+        ],
+        "ensures": [
+          "heatmap(e).length === e.numSlots",
+          "\\result.length === e.numSlots",
+          "forall(s, 0 <= s && s < e.numSlots ==> \\result[s] === (heatmap(e)[s] === maxCount(heatmap(e)) && maxCount(heatmap(e)) > 0))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The isBest function returns a boolean array where each slot is marked true if and only if it has the maximum count of free participants and that maximum is positive."
+    },
+    {
+      "specId": "availableAtLeast",
+      "function": "availableAtLeast",
+      "requirement": "Marks exactly the slots where at least k participants are free.",
+      "spec": {
+        "signature": "availableAtLeast(e: Event, k: number): boolean[]",
+        "requires": [
+          "e.numSlots >= 0"
+        ],
+        "ensures": [
+          "heatmap(e).length === e.numSlots",
+          "\\result.length === e.numSlots",
+          "forall(s, 0 <= s && s < e.numSlots ==> \\result[s] === (heatmap(e)[s] >= k))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The availableAtLeast function returns a boolean array where each slot is marked true if and only if the count of free participants at that slot is at least k."
+    },
+    {
+      "specId": "countFreeConcat",
+      "function": "countFreeConcat",
+      "requirement": "Counting two participant batches separately and summing equals counting the two concatenated — the free-count is additive over concatenation.",
+      "spec": {
+        "signature": "countFreeConcat(xs: Participant[], ys: Participant[], s: number): boolean",
+        "requires": [],
+        "ensures": [
+          "countFree(xs.concat(ys), s) === countFree(xs, s) + countFree(ys, s)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The count of free participants at a slot in a concatenated array equals the sum of counts in each array separately."
+    },
+    {
+      "specId": "countFreeComm",
+      "function": "countFreeComm",
+      "requirement": "A slot's free-count is the same whether two participant batches are concatenated in one order or the other.",
+      "spec": {
+        "signature": "countFreeComm(xs: Participant[], ys: Participant[], s: number): boolean",
+        "requires": [],
+        "ensures": [
+          "countFree(xs.concat(ys), s) === countFree(ys.concat(xs), s)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The count of free participants is invariant under reordering of concatenated arrays."
+    },
+    {
+      "specId": "heatmapBatchOrderInvariant",
+      "function": "heatmapBatchOrderInvariant",
+      "requirement": "Two events that differ only in the order of two participant batches have identical heatmaps.",
+      "spec": {
+        "signature": "heatmapBatchOrderInvariant(a: Event, b: Event, xs: Participant[], ys: Participant[]): boolean",
+        "requires": [
+          "a.numSlots >= 0 && a.numSlots === b.numSlots",
+          "a.participants === xs.concat(ys)",
+          "b.participants === ys.concat(xs)"
+        ],
+        "ensures": [
+          "heatmap(a).length === a.numSlots",
+          "heatmap(b).length === b.numSlots",
+          "forall(s, 0 <= s && s < a.numSlots ==> heatmap(a)[s] === heatmap(b)[s])"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The heatmap is invariant when participants are reordered by concatenating them in a different order."
+    },
+    {
+      "specId": "initEvent",
+      "function": "initEvent",
+      "requirement": "A well-formed event of the given grid width; that it starts empty is not part of the proven contract.",
+      "spec": {
+        "signature": "initEvent(id: string, title: string, numSlots: number): Event",
+        "requires": [
+          "numSlots >= 0"
+        ],
+        "ensures": [
+          "wellFormed(\\result)",
+          "\\result.numSlots === numSlots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Creating an event with a given number of slots produces a well-formed event with that exact number of slots."
+    },
+    {
+      "specId": "allAvailLenSnoc",
+      "function": "allAvailLenSnoc",
+      "requirement": "Appending a participant whose row matches the grid width preserves the invariant that every row has the grid width.",
+      "spec": {
+        "signature": "allAvailLenSnoc(ps: Participant[], p: Participant, n: number): boolean",
+        "requires": [
+          "allAvailLen(ps, n)",
+          "p.avail.length === n"
+        ],
+        "ensures": [
+          "allAvailLen(ps.concat([p]), n)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If all participants in an array have availability arrays of length n, and a new participant has an availability array of length n, then all participants in the concatenated array have availability arrays of length n."
+    },
+    {
+      "specId": "addParticipant",
+      "function": "addParticipant",
+      "requirement": "Preserves well-formedness and the grid width; the roster addition itself is not part of the proven contract.",
+      "spec": {
+        "signature": "addParticipant(e: Event, p: Participant): Event",
+        "requires": [
+          "wellFormed(e)",
+          "p.avail.length === e.numSlots"
+        ],
+        "ensures": [
+          "wellFormed(\\result)",
+          "\\result.numSlots === e.numSlots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Adding a participant with a compatible availability array to a well-formed event produces a well-formed event with the same number of slots."
+    },
+    {
+      "specId": "setAvailPreservesLen",
+      "function": "setAvailPreservesLen",
+      "requirement": "Replacing one participant's availability keeps every row at the grid width.",
+      "spec": {
+        "signature": "setAvailPreservesLen(ps: Participant[], pid: string, newAvail: boolean[], n: number): boolean",
+        "requires": [
+          "allAvailLen(ps, n)",
+          "newAvail.length === n"
+        ],
+        "ensures": [
+          "allAvailLen(setAvail(ps, pid, newAvail), n)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Setting a participant's availability in an array preserves the invariant that all participants have availability arrays of a fixed length."
+    },
+    {
+      "specId": "setAvailability",
+      "function": "setAvailability",
+      "requirement": "Preserves well-formedness and the grid width; the row replacement itself is not part of the proven contract.",
+      "spec": {
+        "signature": "setAvailability(e: Event, pid: string, newAvail: boolean[]): Event",
+        "requires": [
+          "wellFormed(e)",
+          "newAvail.length === e.numSlots"
+        ],
+        "ensures": [
+          "wellFormed(\\result)",
+          "\\result.numSlots === e.numSlots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Setting a participant's availability in a well-formed event produces a well-formed event with the same number of slots."
+    },
+    {
+      "specId": "removePPreservesLen",
+      "function": "removePPreservesLen",
+      "requirement": "Removing a participant keeps every remaining row at the grid width.",
+      "spec": {
+        "signature": "removePPreservesLen(ps: Participant[], pid: string, n: number): boolean",
+        "requires": [
+          "allAvailLen(ps, n)"
+        ],
+        "ensures": [
+          "allAvailLen(removeP(ps, pid), n)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Removing a participant from an array preserves the invariant that all remaining participants have availability arrays of a fixed length."
+    },
+    {
+      "specId": "removeParticipant",
+      "function": "removeParticipant",
+      "requirement": "Preserves well-formedness and the grid width; the removal itself is not part of the proven contract.",
+      "spec": {
+        "signature": "removeParticipant(e: Event, pid: string): Event",
+        "requires": [
+          "wellFormed(e)"
+        ],
+        "ensures": [
+          "wellFormed(\\result)",
+          "\\result.numSlots === e.numSlots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Removing a participant from a well-formed event produces a well-formed event with the same number of slots."
+    },
+    {
+      "specId": "containsSnoc",
+      "function": "containsSnoc",
+      "requirement": "Appending index y to a sparse list adds exactly y to its membership and changes nothing else.",
+      "spec": {
+        "signature": "containsSnoc(xs: number[], y: number, i: number): boolean",
+        "requires": [],
+        "ensures": [
+          "contains(xs.concat([y]), i) === (contains(xs, i) || y === i)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "A number is contained in a concatenated array if and only if it is contained in the original array or equals the appended element."
+    },
+    {
+      "specId": "sparsify",
+      "function": "sparsify",
+      "requirement": "The indices at which the availability bitset is true.",
+      "spec": {
+        "signature": "sparsify(a: boolean[]): number[]",
+        "requires": [],
+        "ensures": [
+          "forall(i, contains(\\result, i) === (0 <= i && i < a.length && a[i]))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The sparsify function converts a boolean array to an array of indices where the boolean array is true."
+    },
+    {
+      "specId": "densify",
+      "function": "densify",
+      "requirement": "Decodes a sparse index list into a width-n bitset whose bit i is set exactly when i is in the list.",
+      "spec": {
+        "signature": "densify(idxs: number[], n: number): boolean[]",
+        "requires": [
+          "0 <= n"
+        ],
+        "ensures": [
+          "\\result.length === n",
+          "forall(i, 0 <= i && i < n ==> \\result[i] === contains(idxs, i))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The densify function converts an array of indices to a boolean array of a given length, where each position is true if its index is in the input array."
+    },
+    {
+      "specId": "sparseRoundTrip",
+      "function": "sparseRoundTrip",
+      "requirement": "Encoding an availability bitset to its sparse true-index list and decoding back reconstructs the original exactly.",
+      "spec": {
+        "signature": "sparseRoundTrip(a: boolean[]): boolean",
+        "requires": [],
+        "ensures": [
+          "densify(sparsify(a), a.length).length === a.length",
+          "forall(i, 0 <= i && i < a.length ==> densify(sparsify(a), a.length)[i] === a[i])"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Converting a boolean array to sparse form and back to dense form recovers the original array."
+    },
+    {
+      "specId": "countFreeAllFree",
+      "function": "countFreeAllFree",
+      "requirement": "If every participant is free at a slot, the free-count there equals the full roster size.",
+      "spec": {
+        "signature": "countFreeAllFree(ps: Participant[], s: number): boolean",
+        "requires": [
+          "forall(i, 0 <= i && i < ps.length ==> freeAt(ps[i], s) === true)"
+        ],
+        "ensures": [
+          "countFree(ps, s) === ps.length"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If all participants are free at a given slot, then the count of free participants at that slot equals the total number of participants."
+    },
+    {
+      "specId": "heatmapMonotoneUnderJoin",
+      "function": "heatmapMonotoneUnderJoin",
+      "requirement": "A participant joining never lowers any slot's free-count.",
+      "spec": {
+        "signature": "heatmapMonotoneUnderJoin(e: Event, p: Participant): boolean",
+        "requires": [
+          "wellFormed(e)",
+          "p.avail.length === e.numSlots"
+        ],
+        "ensures": [
+          "heatmap(addParticipant(e, p)).length === e.numSlots",
+          "heatmap(e).length === e.numSlots",
+          "forall(s, 0 <= s && s < e.numSlots ==> heatmap(addParticipant(e, p))[s] >= heatmap(e)[s])"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Adding a participant to an event increases or maintains the count of free participants at each slot."
+    },
+    {
+      "specId": "unanimousIsBest",
+      "function": "unanimousIsBest",
+      "requirement": "If everyone is free at a given slot, that slot is among the recommended best slots.",
+      "spec": {
+        "signature": "unanimousIsBest(e: Event, s: number): boolean",
+        "requires": [
+          "e.numSlots >= 0",
+          "e.participants.length > 0",
+          "0 <= s && s < e.numSlots",
+          "forall(i, 0 <= i && i < e.participants.length ==> freeAt(e.participants[i], s) === true)"
+        ],
+        "ensures": [
+          "isBest(e).length === e.numSlots",
+          "isBest(e)[s] === true"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If all participants are free at a given slot, then that slot is marked as best."
+    },
+    {
+      "specId": "setAvailLWWCommutes",
+      "function": "setAvailLWWCommutes",
+      "requirement": "Two last-writer-wins writes to the same participant with distinct timestamps commute — applying them in either order gives the same result.",
+      "spec": {
+        "signature": "setAvailLWWCommutes(ps: Participant[], pid: string, a1: boolean[], t1: number, a2: boolean[], t2: number): boolean",
+        "requires": [
+          "t1 !== t2"
+        ],
+        "ensures": [
+          "setAvailLWW(setAvailLWW(ps, pid, a1, t1), pid, a2, t2) === setAvailLWW(setAvailLWW(ps, pid, a2, t2), pid, a1, t1)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Setting availability with different timestamps commutes: the order of operations does not matter when timestamps differ."
+    },
+    {
+      "specId": "setAvailLWWPreservesLen",
+      "function": "setAvailLWWPreservesLen",
+      "requirement": "A last-writer-wins write keeps every row at the grid width.",
+      "spec": {
+        "signature": "setAvailLWWPreservesLen(ps: Participant[], pid: string, avail: boolean[], at: number, n: number): boolean",
+        "requires": [
+          "allAvailLen(ps, n)",
+          "avail.length === n"
+        ],
+        "ensures": [
+          "allAvailLen(setAvailLWW(ps, pid, avail, at), n)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Setting availability with a timestamp preserves the invariant that all participants have availability arrays of a fixed length."
+    },
+    {
+      "specId": "setAvailabilityLWW",
+      "function": "setAvailabilityLWW",
+      "requirement": "Preserves well-formedness and the grid width; the last-writer-wins update itself is not part of the proven contract.",
+      "spec": {
+        "signature": "setAvailabilityLWW(e: Event, pid: string, avail: boolean[], at: number): Event",
+        "requires": [
+          "wellFormed(e)",
+          "avail.length === e.numSlots"
+        ],
+        "ensures": [
+          "wellFormed(\\result)",
+          "\\result.numSlots === e.numSlots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Setting a participant's availability with a timestamp in a well-formed event produces a well-formed event with the same number of slots."
+    },
+    {
+      "specId": "applyOp",
+      "function": "applyOp",
+      "requirement": "Preserves the grid width; the op's effect on the roster is not part of the proven contract.",
+      "spec": {
+        "signature": "applyOp(e: Event, op: Op): Event",
+        "requires": [],
+        "ensures": [
+          "\\result.numSlots === e.numSlots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Applying an operation to an event preserves the number of slots."
+    },
+    {
+      "specId": "applyOpPreservesInv",
+      "function": "applyOpPreservesInv",
+      "requirement": "Applying a well-formed op to a well-formed event yields a well-formed event.",
+      "spec": {
+        "signature": "applyOpPreservesInv(e: Event, op: Op): boolean",
+        "requires": [
+          "wellFormed(e)",
+          "opOk(op, e.numSlots)"
+        ],
+        "ensures": [
+          "wellFormed(applyOp(e, op))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Applying a valid operation to a well-formed event produces a well-formed event."
+    },
+    {
+      "specId": "replayPreservesInv",
+      "function": "replayPreservesInv",
+      "requirement": "Replaying a well-formed op log over a well-formed event yields a well-formed event of the same grid width.",
+      "spec": {
+        "signature": "replayPreservesInv(e: Event, ops: Op[]): boolean",
+        "requires": [
+          "wellFormed(e)",
+          "allOpsOk(ops, e.numSlots)"
+        ],
+        "ensures": [
+          "wellFormed(replay(e, ops))",
+          "replay(e, ops).numSlots === e.numSlots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Replaying a sequence of valid operations on a well-formed event produces a well-formed event with the same number of slots."
+    },
+    {
+      "specId": "freeParticipants",
+      "function": "freeParticipants",
+      "requirement": "A list whose length equals the slot's free-count.",
+      "spec": {
+        "signature": "freeParticipants(ps: Participant[], s: number): Participant[]",
+        "requires": [],
+        "ensures": [
+          "\\result.length === countFree(ps, s)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The freeParticipants function returns an array of participants who are free at a given slot, with length equal to the count of free participants."
+    },
+    {
+      "specId": "whoIsFree",
+      "function": "whoIsFree",
+      "requirement": "A list whose size equals the heatmap count for that slot.",
+      "spec": {
+        "signature": "whoIsFree(e: Event, s: number): Participant[]",
+        "requires": [
+          "e.numSlots >= 0",
+          "0 <= s && s < e.numSlots"
+        ],
+        "ensures": [
+          "heatmap(e).length === e.numSlots",
+          "\\result.length === heatmap(e)[s]"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The whoIsFree function returns an array of participants who are free at a given slot, with length equal to the heatmap value at that slot."
+    },
+    {
+      "specId": "countFreePerm",
+      "function": "countFreePerm",
+      "requirement": "Any permutation of the participant list leaves every slot's free-count unchanged.",
+      "spec": {
+        "signature": "countFreePerm(xs: Participant[], ys: Participant[], s: number): boolean",
+        "requires": [
+          "perm(xs, ys)"
+        ],
+        "ensures": [
+          "countFree(xs, s) === countFree(ys, s)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The count of free participants at a slot is invariant under permutation of the participant array."
+    },
+    {
+      "specId": "heatmapPermInvariant",
+      "function": "heatmapPermInvariant",
+      "requirement": "Two events whose participant lists are permutations of each other have identical heatmaps.",
+      "spec": {
+        "signature": "heatmapPermInvariant(a: Event, b: Event): boolean",
+        "requires": [
+          "a.numSlots >= 0 && a.numSlots === b.numSlots",
+          "perm(a.participants, b.participants)"
+        ],
+        "ensures": [
+          "heatmap(a).length === a.numSlots",
+          "heatmap(b).length === b.numSlots",
+          "forall(s, 0 <= s && s < a.numSlots ==> heatmap(a)[s] === heatmap(b)[s])"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The heatmap is invariant when the participant array is permuted."
+    }
+  ],
+  "gaps": []
+}

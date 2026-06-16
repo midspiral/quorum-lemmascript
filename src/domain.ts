@@ -76,6 +76,7 @@ export function freeAt(p: Participant, s: number): boolean {
 // count; spec-level count and the engine that produces it are the same fn.
 export function countFree(ps: Participant[], s: number): number {
   //@ verify
+  //@ contract A count between 0 and the number of participants.
   //@ decreases ps.length
   //@ ensures 0 <= \result && \result <= ps.length
   if (ps.length === 0) return 0
@@ -100,6 +101,7 @@ export function heatmapUpto(ps: Participant[], k: number): number[] {
 //   B1 length, B2 count-correctness, B3 boundedness.
 export function heatmap(e: Event): number[] {
   //@ verify
+  //@ contract The per-slot count of how many participants are free at each slot.
   //@ requires e.numSlots >= 0
   //@ ensures \result.length === e.numSlots
   //@ ensures forall(s, 0 <= s && s < e.numSlots ==> \result[s] === countFree(e.participants, s))
@@ -113,6 +115,7 @@ export function heatmap(e: Event): number[] {
 // break attainment). On a real heatmap every entry is >= 0, so the result is.
 export function maxCount(h: number[]): number {
   //@ verify
+  //@ contract The largest count in the heatmap, and for a non-empty heatmap a value that some slot actually attains.
   //@ decreases h.length
   //@ ensures forall(s, 0 <= s && s < h.length ==> h[s] <= \result)
   //@ ensures h.length > 0 ==> exists(s, 0 <= s && s < h.length && h[s] === \result)
@@ -143,6 +146,7 @@ export function isBestList(h: number[], best: number): boolean[] {
 // highlights directly.
 export function isBest(e: Event): boolean[] {
   //@ verify
+  //@ contract Marks exactly the slots whose free-count ties the maximum, with nothing marked until at least one participant has entered availability.
   //@ requires e.numSlots >= 0
   //@ ensures heatmap(e).length === e.numSlots
   //@ ensures \result.length === e.numSlots
@@ -167,6 +171,7 @@ export function atLeastList(h: number[], k: number): boolean[] {
 // characterized exactly against the heatmap (C4).
 export function availableAtLeast(e: Event, k: number): boolean[] {
   //@ verify
+  //@ contract Marks exactly the slots where at least k participants are free.
   //@ requires e.numSlots >= 0
   //@ ensures heatmap(e).length === e.numSlots
   //@ ensures \result.length === e.numSlots
@@ -184,6 +189,7 @@ export function availableAtLeast(e: Event, k: number): boolean[] {
 // the theorem, proved by induction in the companion .dfy.)
 export function countFreeConcat(xs: Participant[], ys: Participant[], s: number): boolean {
   //@ verify
+  //@ contract Counting two participant batches separately and summing equals counting the two concatenated — the free-count is additive over concatenation.
   //@ ensures countFree(xs.concat(ys), s) === countFree(xs, s) + countFree(ys, s)
   return true
 }
@@ -193,6 +199,7 @@ export function countFreeConcat(xs: Participant[], ys: Participant[], s: number)
 // homomorphism plus commutativity of (+).
 export function countFreeComm(xs: Participant[], ys: Participant[], s: number): boolean {
   //@ verify
+  //@ contract A slot's free-count is the same whether two participant batches are concatenated in one order or the other.
   //@ ensures countFree(xs.concat(ys), s) === countFree(ys.concat(xs), s)
   return true
 }
@@ -203,6 +210,7 @@ export function countFreeComm(xs: Participant[], ys: Participant[], s: number): 
 // any order, agree on the heatmap (and hence on isBest / availableAtLeast).
 export function heatmapBatchOrderInvariant(a: Event, b: Event, xs: Participant[], ys: Participant[]): boolean {
   //@ verify
+  //@ contract Two events that differ only in the order of two participant batches have identical heatmaps.
   //@ requires a.numSlots >= 0 && a.numSlots === b.numSlots
   //@ requires a.participants === xs.concat(ys)
   //@ requires b.participants === ys.concat(xs)
@@ -217,6 +225,7 @@ export function heatmapBatchOrderInvariant(a: Event, b: Event, xs: Participant[]
 // A fresh event has no participants, so the invariant holds vacuously.
 export function initEvent(id: string, title: string, numSlots: number): Event {
   //@ verify
+  //@ contract A well-formed event of the given grid width; that it starts empty is not part of the proven contract.
   //@ requires numSlots >= 0
   //@ ensures wellFormed(\result)
   //@ ensures \result.numSlots === numSlots
@@ -226,6 +235,7 @@ export function initEvent(id: string, title: string, numSlots: number): Event {
 // Appending a grid-width-matching participant preserves allAvailLen (induction).
 export function allAvailLenSnoc(ps: Participant[], p: Participant, n: number): boolean {
   //@ verify
+  //@ contract Appending a participant whose row matches the grid width preserves the invariant that every row has the grid width.
   //@ requires allAvailLen(ps, n)
   //@ requires p.avail.length === n
   //@ decreases ps.length
@@ -236,6 +246,7 @@ export function allAvailLenSnoc(ps: Participant[], p: Participant, n: number): b
 // A participant joins by appending their row.
 export function addParticipant(e: Event, p: Participant): Event {
   //@ verify
+  //@ contract Preserves well-formedness and the grid width; the roster addition itself is not part of the proven contract.
   //@ requires wellFormed(e)
   //@ requires p.avail.length === e.numSlots
   //@ ensures wellFormed(\result)
@@ -255,6 +266,7 @@ export function setAvail(ps: Participant[], pid: string, newAvail: boolean[]): P
 
 export function setAvailPreservesLen(ps: Participant[], pid: string, newAvail: boolean[], n: number): boolean {
   //@ verify
+  //@ contract Replacing one participant's availability keeps every row at the grid width.
   //@ requires allAvailLen(ps, n)
   //@ requires newAvail.length === n
   //@ decreases ps.length
@@ -265,6 +277,7 @@ export function setAvailPreservesLen(ps: Participant[], pid: string, newAvail: b
 // A participant repaints their row; grid width is unchanged, so Inv is preserved.
 export function setAvailability(e: Event, pid: string, newAvail: boolean[]): Event {
   //@ verify
+  //@ contract Preserves well-formedness and the grid width; the row replacement itself is not part of the proven contract.
   //@ requires wellFormed(e)
   //@ requires newAvail.length === e.numSlots
   //@ ensures wellFormed(\result)
@@ -284,6 +297,7 @@ export function removeP(ps: Participant[], pid: string): Participant[] {
 
 export function removePPreservesLen(ps: Participant[], pid: string, n: number): boolean {
   //@ verify
+  //@ contract Removing a participant keeps every remaining row at the grid width.
   //@ requires allAvailLen(ps, n)
   //@ decreases ps.length
   //@ ensures allAvailLen(removeP(ps, pid), n)
@@ -292,6 +306,7 @@ export function removePPreservesLen(ps: Participant[], pid: string, n: number): 
 
 export function removeParticipant(e: Event, pid: string): Event {
   //@ verify
+  //@ contract Preserves well-formedness and the grid width; the removal itself is not part of the proven contract.
   //@ requires wellFormed(e)
   //@ ensures wellFormed(\result)
   //@ ensures \result.numSlots === e.numSlots
@@ -316,6 +331,7 @@ export function contains(idxs: number[], i: number): boolean {
 // Appending an index `y` adds exactly `y` to the membership set.
 export function containsSnoc(xs: number[], y: number, i: number): boolean {
   //@ verify
+  //@ contract Appending index y to a sparse list adds exactly y to its membership and changes nothing else.
   //@ decreases xs.length
   //@ ensures contains(xs.concat([y]), i) === (contains(xs, i) || y === i)
   return true
@@ -336,6 +352,7 @@ export function sparsifyUpto(a: boolean[], k: number): number[] {
 // The sparse encoding of an availability bitset: its true-indices.
 export function sparsify(a: boolean[]): number[] {
   //@ verify
+  //@ contract The indices at which the availability bitset is true.
   //@ ensures forall(i, contains(\result, i) === (0 <= i && i < a.length && a[i]))
   return sparsifyUpto(a, a.length)
 }
@@ -355,6 +372,7 @@ export function densifyUpto(idxs: number[], k: number): boolean[] {
 // Decode a sparse index list back into a dense bitset of width `n`.
 export function densify(idxs: number[], n: number): boolean[] {
   //@ verify
+  //@ contract Decodes a sparse index list into a width-n bitset whose bit i is set exactly when i is in the list.
   //@ requires 0 <= n
   //@ ensures \result.length === n
   //@ ensures forall(i, 0 <= i && i < n ==> \result[i] === contains(idxs, i))
@@ -365,6 +383,7 @@ export function densify(idxs: number[], n: number): boolean[] {
 // export loses nothing.
 export function sparseRoundTrip(a: boolean[]): boolean {
   //@ verify
+  //@ contract Encoding an availability bitset to its sparse true-index list and decoding back reconstructs the original exactly.
   //@ ensures densify(sparsify(a), a.length).length === a.length
   //@ ensures forall(i, 0 <= i && i < a.length ==> densify(sparsify(a), a.length)[i] === a[i])
   return true
@@ -375,6 +394,7 @@ export function sparseRoundTrip(a: boolean[]): boolean {
 // If every participant is free at slot s, the count there is the full roster.
 export function countFreeAllFree(ps: Participant[], s: number): boolean {
   //@ verify
+  //@ contract If every participant is free at a slot, the free-count there equals the full roster size.
   //@ requires forall(i, 0 <= i && i < ps.length ==> freeAt(ps[i], s) === true)
   //@ decreases ps.length
   //@ ensures countFree(ps, s) === ps.length
@@ -386,6 +406,7 @@ export function countFreeAllFree(ps: Participant[], s: number): boolean {
 // and countFree([p]) >= 0.
 export function heatmapMonotoneUnderJoin(e: Event, p: Participant): boolean {
   //@ verify
+  //@ contract A participant joining never lowers any slot's free-count.
   //@ requires wellFormed(e)
   //@ requires p.avail.length === e.numSlots
   //@ ensures heatmap(addParticipant(e, p)).length === e.numSlots
@@ -398,6 +419,7 @@ export function heatmapMonotoneUnderJoin(e: Event, p: Participant): boolean {
 // which is positive). freeAt is total, so the hypothesis needs no well-formedness.
 export function unanimousIsBest(e: Event, s: number): boolean {
   //@ verify
+  //@ contract If everyone is free at a given slot, that slot is among the recommended best slots.
   //@ requires e.numSlots >= 0
   //@ requires e.participants.length > 0
   //@ requires 0 <= s && s < e.numSlots
@@ -430,6 +452,7 @@ export function setAvailLWW(ps: Participant[], pid: string, avail: boolean[], at
 // D2: two LWW writes to the same participant with distinct timestamps commute.
 export function setAvailLWWCommutes(ps: Participant[], pid: string, a1: boolean[], t1: number, a2: boolean[], t2: number): boolean {
   //@ verify
+  //@ contract Two last-writer-wins writes to the same participant with distinct timestamps commute — applying them in either order gives the same result.
   //@ requires t1 !== t2
   //@ decreases ps.length
   //@ ensures setAvailLWW(setAvailLWW(ps, pid, a1, t1), pid, a2, t2) === setAvailLWW(setAvailLWW(ps, pid, a2, t2), pid, a1, t1)
@@ -463,6 +486,7 @@ export function allOpsOk(ops: Op[], n: number): boolean {
 
 export function setAvailLWWPreservesLen(ps: Participant[], pid: string, avail: boolean[], at: number, n: number): boolean {
   //@ verify
+  //@ contract A last-writer-wins write keeps every row at the grid width.
   //@ requires allAvailLen(ps, n)
   //@ requires avail.length === n
   //@ decreases ps.length
@@ -473,6 +497,7 @@ export function setAvailLWWPreservesLen(ps: Participant[], pid: string, avail: b
 // A participant repaints their row, last-writer-wins by timestamp.
 export function setAvailabilityLWW(e: Event, pid: string, avail: boolean[], at: number): Event {
   //@ verify
+  //@ contract Preserves well-formedness and the grid width; the last-writer-wins update itself is not part of the proven contract.
   //@ requires wellFormed(e)
   //@ requires avail.length === e.numSlots
   //@ ensures wellFormed(\result)
@@ -485,6 +510,7 @@ export function setAvailabilityLWW(e: Event, pid: string, avail: boolean[], at: 
 // separately by applyOpPreservesInv.
 export function applyOp(e: Event, op: Op): Event {
   //@ verify
+  //@ contract Preserves the grid width; the op's effect on the roster is not part of the proven contract.
   //@ ensures \result.numSlots === e.numSlots
   if (op.kind === "join") return { ...e, participants: [...e.participants, op.p] }
   return { ...e, participants: setAvailLWW(e.participants, op.pid, op.avail, op.at) }
@@ -492,6 +518,7 @@ export function applyOp(e: Event, op: Op): Event {
 
 export function applyOpPreservesInv(e: Event, op: Op): boolean {
   //@ verify
+  //@ contract Applying a well-formed op to a well-formed event yields a well-formed event.
   //@ requires wellFormed(e)
   //@ requires opOk(op, e.numSlots)
   //@ ensures wellFormed(applyOp(e, op))
@@ -510,6 +537,7 @@ export function replay(e: Event, ops: Op[]): Event {
 
 export function replayPreservesInv(e: Event, ops: Op[]): boolean {
   //@ verify
+  //@ contract Replaying a well-formed op log over a well-formed event yields a well-formed event of the same grid width.
   //@ requires wellFormed(e)
   //@ requires allOpsOk(ops, e.numSlots)
   //@ decreases ops.length
@@ -526,6 +554,7 @@ export function replayPreservesInv(e: Event, ops: Op[]): boolean {
 
 export function freeParticipants(ps: Participant[], s: number): Participant[] {
   //@ verify
+  //@ contract A list whose length equals the slot's free-count.
   //@ decreases ps.length
   //@ ensures \result.length === countFree(ps, s)
   if (ps.length === 0) return []
@@ -535,6 +564,7 @@ export function freeParticipants(ps: Participant[], s: number): Participant[] {
 
 export function whoIsFree(e: Event, s: number): Participant[] {
   //@ verify
+  //@ contract A list whose size equals the heatmap count for that slot.
   //@ requires e.numSlots >= 0
   //@ requires 0 <= s && s < e.numSlots
   //@ ensures heatmap(e).length === e.numSlots
@@ -553,6 +583,7 @@ export function whoIsFree(e: Event, s: number): Participant[] {
 // induction that reuses `countFreeConcat` as its remove-at-index step.)
 export function countFreePerm(xs: Participant[], ys: Participant[], s: number): boolean {
   //@ verify
+  //@ contract Any permutation of the participant list leaves every slot's free-count unchanged.
   //@ requires perm(xs, ys)
   //@ ensures countFree(xs, s) === countFree(ys, s)
   return true
@@ -564,6 +595,7 @@ export function countFreePerm(xs: Participant[], ys: Participant[], s: number): 
 // just one permutation among all of them.
 export function heatmapPermInvariant(a: Event, b: Event): boolean {
   //@ verify
+  //@ contract Two events whose participant lists are permutations of each other have identical heatmaps.
   //@ requires a.numSlots >= 0 && a.numSlots === b.numSlots
   //@ requires perm(a.participants, b.participants)
   //@ ensures heatmap(a).length === a.numSlots
