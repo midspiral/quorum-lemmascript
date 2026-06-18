@@ -1,5 +1,8 @@
 # Quorum
 
+[![LemmaScript: verified](https://img.shields.io/badge/LemmaScript-verified-brightgreen)](https://github.com/midspiral/quorum-lemmascript/actions/workflows/lemmascript.yml)
+
+
 A slick, **login-free** group scheduler — when2meet/Doodle in spirit — whose answer
 ("here's the time the most people can make it") is **formally verified** in
 [LemmaScript](https://github.com/midspiral/LemmaScript). Pick dates (or just days of the
